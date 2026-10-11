@@ -1,0 +1,49 @@
+{
+	"name": "whatever-tracker",
+	"version": "0.1.0",
+	"description": "Self-hosted tracker for anything: movies, games, concerts, whiskey, cheese, cats...",
+	"private": true,
+	"type": "module",
+	"engines": {
+		"node": ">=22"
+	},
+	"scripts": {
+		"dev": "vite dev",
+		"build": "vite build",
+		"preview": "vite preview",
+		"start": "node build",
+		"check": "svelte-kit sync && svelte-check --tsconfig ./tsconfig.json",
+		"test": "vitest run",
+		"db:generate": "drizzle-kit generate",
+		"lint": "prettier --check .",
+		"format": "prettier --write ."
+	},
+	"dependencies": {
+		"@node-rs/argon2": "^2.2.2",
+		"better-sqlite3": "^13.0.3",
+		"csv-parse": "^7.0.3",
+		"drizzle-orm": "^0.45.4",
+		"fast-xml-parser": "^5.11.2",
+		"sharp": "^0.35.5",
+		"zod": "^4.6.6"
+	},
+	"devDependencies": {
+		"@sveltejs/adapter-node": "^5.5.7",
+		"@sveltejs/kit": "^2.70.3",
+		"@sveltejs/vite-plugin-svelte": "^7.3.1",
+		"@tailwindcss/vite": "^4.3.3",
+		"@types/better-sqlite3": "^9.6.0",
+		"@types/node": "^24.0.0",
+		"barcode-detector": "^3.2.2",
+		"drizzle-kit": "^0.31.11",
+		"prettier": "^3.9.10",
+		"prettier-plugin-svelte": "^4.1.1",
+		"svelte": "^5.57.2",
+		"svelte-check": "^4.7.6",
+		"tailwindcss": "^4.3.3",
+		"typescript": "^6.0.3",
+		"vite": "^8.3.4",
+		"vitest": "^5.0.3",
+		"zxing-wasm": "^3.1.3"
+	}
+}

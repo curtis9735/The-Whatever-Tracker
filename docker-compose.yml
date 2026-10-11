@@ -1,0 +1,33 @@
+# Portainer stack for The Whatever Tracker on a Synology NAS.
+# Paste this into Portainer → Stacks → Add stack → Web editor, then fill in the
+# environment variables at the bottom of that page (see .env.example).
+
+services:
+  tracker:
+    image: ghcr.io/${GITHUB_OWNER:?set GITHUB_OWNER}/whatever-tracker:${TAG:-latest}
+    container_name: whatever-tracker
+    # Run as your DSM user so files in the data folder are yours (find it with `id` over SSH)
+    user: '${PUID:-1026}:${PGID:-100}'
+    ports:
+      - '${HOST_PORT:-8765}:3000'
+    volumes:
+      # Database, photos and nightly backups all live here: back this folder up
+      - ${DATA_PATH:-/volume1/docker/whatever-tracker}:/data
+    environment:
+      # The exact URL you open the app at (through your reverse proxy). Form posts are
+      # rejected if this doesn't match, so no http/https or trailing-slash mismatches.
+      ORIGIN: ${ORIGIN:?set ORIGIN to your public URL, e.g. https://tracker.example.com}
+      # Real client IPs from the proxy (used to throttle password guessing)
+      ADDRESS_HEADER: X-Forwarded-For
+      XFF_DEPTH: '1'
+      # adapter-node's default limit is 512K, far too small for phone photos
+      BODY_SIZE_LIMIT: 25M
+      TZ: ${TZ:-America/New_York}
+      # Metadata sources: leave any blank to switch that source off
+      TMDB_API_KEY: ${TMDB_API_KEY:-}
+      IGDB_CLIENT_ID: ${IGDB_CLIENT_ID:-}
+      IGDB_CLIENT_SECRET: ${IGDB_CLIENT_SECRET:-}
+      BGG_API_TOKEN: ${BGG_API_TOKEN:-}
+      SETLISTFM_API_KEY: ${SETLISTFM_API_KEY:-}
+      MUSICBRAINZ_CONTACT: ${MUSICBRAINZ_CONTACT:-}
+    restart: unless-stopped

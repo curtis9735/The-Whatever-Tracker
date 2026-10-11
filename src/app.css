@@ -1,0 +1,146 @@
+@import 'tailwindcss';
+
+@theme inline {
+	--color-bg: var(--bg);
+	--color-surface: var(--surface);
+	--color-surface-2: var(--surface-2);
+	--color-border: var(--border);
+	--color-fg: var(--fg);
+	--color-muted: var(--muted);
+	--color-accent: var(--accent);
+	--color-accent-fg: var(--accent-fg);
+	--color-accent-soft: var(--accent-soft);
+	--color-danger: var(--danger);
+	--color-star: var(--star);
+	--font-sans:
+		ui-sans-serif, system-ui, -apple-system, 'Segoe UI', Roboto, 'Helvetica Neue', Arial, sans-serif;
+}
+
+:root {
+	color-scheme: light dark;
+	--bg: #f7f7f5;
+	--surface: #ffffff;
+	--surface-2: #f0f0ed;
+	--border: #e2e2dd;
+	--fg: #1c1c1a;
+	--muted: #6b6b65;
+	--accent: #4f46e5;
+	--accent-fg: #ffffff;
+	--accent-soft: #eef0ff;
+	--danger: #dc2626;
+	--star: #f59e0b;
+}
+
+@media (prefers-color-scheme: dark) {
+	:root {
+		--bg: #111113;
+		--surface: #1a1a1d;
+		--surface-2: #242428;
+		--border: #303036;
+		--fg: #ececf0;
+		--muted: #9b9ba5;
+		--accent: #8b93ff;
+		--accent-fg: #0c0c18;
+		--accent-soft: #23243d;
+		--danger: #f87171;
+		--star: #fbbf24;
+	}
+}
+
+html,
+body {
+	background: var(--bg);
+	color: var(--fg);
+	-webkit-tap-highlight-color: transparent;
+}
+
+body {
+	min-height: 100dvh;
+	overflow-x: hidden;
+}
+
+@layer components {
+	.btn {
+		@apply inline-flex min-h-10 items-center justify-center gap-2 rounded-xl border border-border bg-surface px-4 text-sm font-medium text-fg transition select-none hover:bg-surface-2 active:scale-[0.98] disabled:cursor-not-allowed disabled:opacity-50;
+	}
+	.btn-primary {
+		@apply border-transparent bg-accent text-accent-fg hover:bg-accent hover:brightness-110;
+	}
+	.btn-danger {
+		@apply border-transparent bg-danger text-white hover:bg-danger hover:brightness-110;
+	}
+	.btn-ghost {
+		@apply border-transparent bg-transparent hover:bg-surface-2;
+	}
+	.btn-sm {
+		@apply min-h-8 rounded-lg px-3 text-xs;
+	}
+	.btn-icon {
+		@apply min-h-10 w-10 px-0;
+	}
+	.input {
+		@apply block min-h-11 w-full rounded-xl border border-border bg-surface px-3 text-base text-fg placeholder:text-muted focus:border-accent focus:ring-2 focus:ring-accent/30 focus:outline-none md:text-sm;
+	}
+	textarea.input {
+		@apply min-h-24 py-2;
+	}
+	select.input {
+		@apply pr-8;
+	}
+	.label {
+		@apply mb-1 block text-sm font-medium text-fg;
+	}
+	.hint {
+		@apply mt-1 text-xs text-muted;
+	}
+	.card {
+		@apply rounded-2xl border border-border bg-surface;
+	}
+	.chip {
+		@apply inline-flex min-h-8 items-center gap-1 rounded-full border border-border bg-surface px-3 text-xs font-medium whitespace-nowrap text-fg hover:bg-surface-2;
+	}
+	.badge {
+		@apply inline-flex items-center rounded-full bg-surface-2 px-2 py-0.5 text-[11px] font-medium text-muted;
+	}
+	.error-box {
+		@apply rounded-xl border border-danger/40 bg-danger/10 px-3 py-2 text-sm text-danger;
+	}
+	.ok-box {
+		@apply rounded-xl border border-emerald-500/40 bg-emerald-500/10 px-3 py-2 text-sm text-emerald-700 dark:text-emerald-300;
+	}
+	.section-title {
+		@apply text-xs font-semibold tracking-wide text-muted uppercase;
+	}
+	/* App shell navigation */
+	.nav-link {
+		@apply flex min-h-10 items-center gap-3 rounded-xl px-3 text-sm text-fg hover:bg-surface-2;
+	}
+	.nav-active {
+		@apply bg-accent-soft font-medium text-accent hover:bg-accent-soft;
+	}
+	.tab {
+		@apply flex min-h-16 flex-col items-center justify-center gap-0.5 text-[11px] text-muted;
+	}
+	.tab-active {
+		@apply text-accent;
+	}
+}
+
+/* A utility (not a component class) so variants like has-[:checked]: work with it */
+@utility chip-active {
+	border-color: var(--accent);
+	background-color: var(--accent-soft);
+	color: var(--accent);
+}
+
+/* Hide scrollbars on horizontal strips but keep them scrollable */
+.no-scrollbar {
+	scrollbar-width: none;
+}
+.no-scrollbar::-webkit-scrollbar {
+	display: none;
+}
+
+.pb-safe {
+	padding-bottom: env(safe-area-inset-bottom);
+}
