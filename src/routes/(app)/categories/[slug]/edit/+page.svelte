@@ -132,7 +132,8 @@
 
 		<fieldset>
 			<legend class="label">Metadata sources</legend>
-			<p class="hint mb-3 mt-0">Search results of these kinds are suggested for this list.</p>
+			<p class="section-title mt-1 mb-2">In search</p>
+			<p class="hint mt-0 mb-3">Search results of these kinds are suggested for this list.</p>
 			<div class="grid gap-2 sm:grid-cols-2">
 				{#each data.kinds as k (k.key)}
 					<label class="flex items-center gap-2 text-sm">
@@ -144,7 +145,27 @@
 							class="h-4 w-4 accent-[var(--accent)]"
 						/>
 						{k.label}
-						{#if !k.enabled}<span class="badge">no API key</span>{/if}
+						{#if !k.enabled}{@render notConnected()}{/if}
+					</label>
+				{/each}
+			</div>
+
+			<p class="section-title mt-5 mb-2">When logging</p>
+			<div class="grid gap-2">
+				{#each data.logSources as s (s.key)}
+					<label class="flex items-start gap-2 text-sm">
+						<input
+							type="checkbox"
+							name="providerKinds"
+							value={s.key}
+							checked={c.providerKinds.includes(s.key)}
+							class="mt-0.5 h-4 w-4 accent-[var(--accent)]"
+						/>
+						<span>
+							{s.label}
+							{#if !s.enabled}{@render notConnected()}{/if}
+							<span class="block text-xs text-muted">{s.hint}</span>
+						</span>
 					</label>
 				{/each}
 			</div>
@@ -313,3 +334,9 @@
 		</form>
 	</section>
 </div>
+
+{#snippet notConnected()}
+	<a class="badge hover:text-fg" href="/settings#integrations" title="Connect it under Me → Integrations">
+		not connected
+	</a>
+{/snippet}

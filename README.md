@@ -154,7 +154,10 @@ Search only asks sources that match one of your lists. For example, TV results a
 - **Logs:** each log has a date, a rating for that time, a place, a price, notes, photos and the list's log
   fields. Logging something that was in a "planned" status (wishlist, to watch) moves it to the first "done"
   status automatically.
-- **Concerts:** the item is the artist, and each show you attend is a log. With setlist.fm connected:
+- **Concerts:** the item is the artist, and each show you attend is a log. Once setlist.fm is connected
+  (**Me → Integrations**), any list with **Concert setlists (setlist.fm)** ticked under **List settings →
+  Metadata sources → When logging** gets the lookup. The Concerts template has it ticked. To search for artists
+  in the search bar, also connect MusicBrainz, which only needs an email address or URL as contact info.
   - **From search:** tick **I went to a show** and pick the date. You land on the artist's page with the show
     already looked up; if there was one show that day, it's picked automatically.
   - **On the artist's page:** **Add log** offers the same lookup, searchable by date or year, city and venue.
@@ -165,7 +168,7 @@ Search only asks sources that match one of your lists. For example, TV results a
 
 - **Lists:** **Manage lists** lets you rename lists, reorder them, pick an emoji and color, choose a rating scale
   (5 stars with halves, 10 points or 100 points; existing ratings convert automatically), edit the statuses and
-  their groups, and add or remove fields.
+  their groups, choose metadata sources (for search, and setlist.fm for logging), and add or remove fields.
 - **Yamtrack import:** in Yamtrack, export to CSV, then go to **Me → Import from Yamtrack**. You see a preview
   before anything is saved, and re-importing the same file doesn't create duplicates.
 

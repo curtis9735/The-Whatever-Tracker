@@ -87,7 +87,7 @@
 		</div>
 	</section>
 
-	<section class="card p-4 sm:p-5">
+	<section id="integrations" class="card scroll-mt-20 p-4 sm:p-5">
 		<h2 class="mb-1 font-semibold">Integrations</h2>
 		<p class="mb-2 text-sm text-muted">
 			Sources without a key are skipped by search.

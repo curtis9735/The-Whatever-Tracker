@@ -4,6 +4,7 @@ import { db, schema } from '$lib/server/db';
 import { createCategoryFromTemplate, listCategories } from '$lib/server/services/categories';
 import { enabledKinds } from '$lib/server/providers/registry';
 import { TEMPLATES, TEMPLATE_BY_KEY } from '$lib/server/templates';
+import { KIND_BY_KEY } from '$lib/kinds';
 import type { Actions, PageServerLoad } from './$types';
 
 export const load: PageServerLoad = async ({ locals }) => {
@@ -15,8 +16,9 @@ export const load: PageServerLoad = async ({ locals }) => {
 			name: t.name,
 			icon: t.icon,
 			description: t.description,
-			needsSource: t.providerKinds.length > 0,
-			sourceReady: t.providerKinds.every((k) => enabled.has(k)),
+			// Only search sources matter here; setlist.fm is optional extra detail when logging
+			needsSource: t.providerKinds.some((k) => KIND_BY_KEY.has(k)),
+			sourceReady: t.providerKinds.filter((k) => KIND_BY_KEY.has(k)).every((k) => enabled.has(k)),
 			exists: existing.has(t.name.toLowerCase())
 		}))
 	};

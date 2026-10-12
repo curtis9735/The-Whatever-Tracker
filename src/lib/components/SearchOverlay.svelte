@@ -1,7 +1,7 @@
 <script lang="ts">
 	import { goto } from '$app/navigation';
 	import { tick } from 'svelte';
-	import { KINDS, PROVIDER_LABELS } from '$lib/kinds';
+	import { KINDS, PROVIDER_LABELS, SETLIST_SOURCE } from '$lib/kinds';
 	import type { LocalSearchHit, NormalizedMetadata, SearchResult, StatusDef, RatingScale } from '$lib/types';
 	import BarcodeScanner from './BarcodeScanner.svelte';
 	import Icon from './Icon.svelte';
@@ -186,8 +186,9 @@
 		addStatus = addCategory?.statuses[0]?.key ?? '';
 	}
 
-	// Logging a show for an artist continues on the artist's page, where setlist.fm fills in the details
-	const showFlow = $derived(preview?.kindKey === 'musicbrainz:artist' && setlistReady);
+	// Logging a show into a list with setlist.fm turned on continues on the item's page,
+	// where setlist.fm fills in the details
+	const showFlow = $derived(setlistReady && !!addCategory?.providerKinds.includes(SETLIST_SOURCE));
 
 	async function add() {
 		if (!preview || !addCategoryId) return;

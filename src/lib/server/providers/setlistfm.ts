@@ -2,10 +2,14 @@ import { keys } from '../settings';
 import type { SetlistEvent } from '$lib/types';
 import { cached, createLimiter, fetchOk, ProviderError, withTimeout } from './util';
 
-// setlist.fm: free key, 2 requests/second. Used from "Log a concert" rather than the global search.
+// setlist.fm: free key. Its documented limit is 2 requests/second, but in practice requests
+// 0.7 s apart already get "429 Too Many Requests", so keep them a full second apart.
+// Used from "Log a concert" rather than the global search.
 const API = 'https://api.setlist.fm/rest/1.0';
 const DAY = 86_400_000;
-const limiter = createLimiter(600);
+const limiter = createLimiter(1100);
+
+const sleep = (ms: number) => new Promise((r) => setTimeout(r, ms));
 
 export function setlistfmEnabled() {
 	return !!keys().setlistfmKey;
@@ -15,17 +19,27 @@ function headers() {
 	return { 'x-api-key': keys().setlistfmKey, Accept: 'application/json', 'Accept-Language': 'en' };
 }
 
+/** One rate-limited request, retried once if setlist.fm says we're going too fast. */
+async function setlistGet(url: string | URL, signal?: AbortSignal): Promise<Response> {
+	for (let attempt = 0; ; attempt++) {
+		try {
+			return await limiter(
+				() => fetchOk(url, { headers: headers(), signal: withTimeout(signal, 10000), label: 'setlist.fm' }),
+				signal
+			);
+		} catch (e) {
+			if (attempt === 0 && e instanceof ProviderError && e.code === 'rate') {
+				await sleep(2000);
+				continue;
+			}
+			throw e;
+		}
+	}
+}
+
 /** Uncached artist lookup (Radiohead) to check the key. */
 export async function testSetlistfm(signal?: AbortSignal) {
-	await limiter(
-		() =>
-			fetchOk(`${API}/artist/a74b1b7f-71a5-4011-9441-d0b5e4122711`, {
-				headers: headers(),
-				signal: withTimeout(signal, 10000),
-				label: 'setlist.fm'
-			}),
-		signal
-	);
+	await setlistGet(`${API}/artist/a74b1b7f-71a5-4011-9441-d0b5e4122711`, signal);
 }
 
 interface RawSetlist {
@@ -110,22 +124,16 @@ export async function searchSetlists(
 	const url = setlistSearchUrl(q);
 	// Setlists appear on setlist.fm in the days after a show, so "nothing yet" is only cached briefly
 	const ttl = (r: { total: number }) => (r.total > 0 ? DAY : 10 * 60_000);
-	return cached(`setlistfm:${url.search}`, ttl, () =>
-		limiter(async () => {
-			let res: Response;
-			try {
-				res = await fetchOk(url, {
-					headers: headers(),
-					signal: withTimeout(signal, 10000),
-					label: 'setlist.fm'
-				});
-			} catch (e) {
-				// setlist.fm answers "no matches" with a 404
-				if (e instanceof ProviderError && e.code === 'notfound') return { events: [], total: 0 };
-				throw e;
-			}
-			const json = (await res.json()) as { setlist?: RawSetlist[]; total?: number };
-			return { events: (json.setlist ?? []).map(normalizeSetlist), total: json.total ?? 0 };
-		}, signal)
-	);
+	return cached(`setlistfm:${url.search}`, ttl, async () => {
+		let res: Response;
+		try {
+			res = await setlistGet(url, signal);
+		} catch (e) {
+			// setlist.fm answers "no matches" with a 404
+			if (e instanceof ProviderError && e.code === 'notfound') return { events: [], total: 0 };
+			throw e;
+		}
+		const json = (await res.json()) as { setlist?: RawSetlist[]; total?: number };
+		return { events: (json.setlist ?? []).map(normalizeSetlist), total: json.total ?? 0 };
+	});
 }

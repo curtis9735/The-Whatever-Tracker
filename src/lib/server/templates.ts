@@ -113,7 +113,7 @@ export const TEMPLATES: CategoryTemplate[] = [
 			{ key: 'want', label: 'Want to see', group: 'planned' },
 			{ key: 'seen', label: 'Seen', group: 'done' }
 		],
-		providerKinds: ['musicbrainz:artist'],
+		providerKinds: ['musicbrainz:artist', 'setlistfm:setlist'],
 		fields: [
 			{ key: 'with', label: 'Went with', type: 'text', scope: 'log' },
 			{ key: 'opener', label: 'Opening act', type: 'text', scope: 'log' }

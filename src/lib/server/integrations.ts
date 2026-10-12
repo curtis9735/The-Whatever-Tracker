@@ -58,7 +58,8 @@ export const INTEGRATIONS: Integration[] = [
 		id: 'setlistfm',
 		label: 'setlist.fm',
 		gives: 'Concert setlists when you log a show',
-		howTo: 'Free setlist.fm account → Settings → API → apply for a key (non-commercial use).',
+		howTo:
+			'Free setlist.fm account → Settings → API → apply for a key (non-commercial use). Then make sure “Concert setlists (setlist.fm)” is ticked in your concerts list’s settings (it is for the Concerts template).',
 		docsUrl: 'https://www.setlist.fm/settings/api',
 		enabled: setlistfmEnabled,
 		test: testSetlistfm

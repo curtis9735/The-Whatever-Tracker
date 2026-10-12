@@ -11,7 +11,8 @@ import {
 } from '$lib/server/services/categories';
 import { deleteItem } from '$lib/server/services/items';
 import { enabledKinds } from '$lib/server/providers/registry';
-import { CATEGORY_COLORS, KINDS } from '$lib/kinds';
+import { setlistfmEnabled } from '$lib/server/providers/setlistfm';
+import { CATEGORY_COLORS, KINDS, LOG_SOURCES } from '$lib/kinds';
 import { FIELD_TYPES, fieldKey, slugify } from '$lib/fields';
 import type { FieldType, RatingScale } from '$lib/types';
 import type { Actions, PageServerLoad } from './$types';
@@ -36,6 +37,7 @@ export const load: PageServerLoad = async ({ locals, params, url }) => {
 		...cat,
 		itemCount: categoryItemCount(cat.category.id),
 		kinds: KINDS.map((k) => ({ ...k, enabled: enabled.has(k.key) })),
+		logSources: LOG_SOURCES.map((s) => ({ ...s, enabled: setlistfmEnabled() })),
 		colors: Object.entries(CATEGORY_COLORS),
 		isNew: url.searchParams.get('new') === '1'
 	};
@@ -86,7 +88,7 @@ export const actions: Actions = {
 			return { key, label: s.label, group: s.group };
 		});
 
-		const validKinds = new Set(KINDS.map((k) => k.key));
+		const validKinds = new Set<string>([...KINDS.map((k) => k.key), ...LOG_SOURCES.map((s) => s.key)]);
 		const providerKinds = form
 			.getAll('providerKinds')
 			.map(String)

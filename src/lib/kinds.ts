@@ -38,6 +38,21 @@ export const KINDS: KindInfo[] = [
 
 export const KIND_BY_KEY = new Map(KINDS.map((k) => [k.key, k]));
 
+/**
+ * Sources used while *logging* rather than in search. Stored alongside the search kinds in a
+ * list's providerKinds, so a list opts in the same way.
+ */
+export const LOG_SOURCES = [
+	{
+		key: 'setlistfm:setlist',
+		provider: 'setlistfm',
+		label: 'Concert setlists (setlist.fm)',
+		hint: 'Find the show (venue, date, songs) when you log one'
+	}
+] as const;
+
+export const SETLIST_SOURCE = 'setlistfm:setlist';
+
 export const PROVIDER_LABELS: Record<string, string> = {
 	tmdb: 'TMDB',
 	igdb: 'IGDB',

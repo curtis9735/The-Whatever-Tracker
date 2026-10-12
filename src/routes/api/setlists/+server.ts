@@ -3,7 +3,7 @@ import { searchSetlists, setlistfmEnabled } from '$lib/server/providers/setlistf
 import { ProviderError } from '$lib/server/providers/util';
 import { getOwnedItem } from '$lib/server/services/items';
 import { getCategoryById } from '$lib/server/services/categories';
-import { isConcertItem, setlistArtist } from '$lib/server/services/concerts';
+import { listUsesSetlists, setlistArtist } from '$lib/server/services/concerts';
 import type { RequestHandler } from './$types';
 
 /** setlist.fm shows for the performer behind an item, filtered by date/year, city and venue. */
@@ -12,7 +12,9 @@ export const GET: RequestHandler = async ({ locals, url, request }) => {
 	const userId = locals.user!.id;
 	const item = getOwnedItem(userId, Number(url.searchParams.get('item')));
 	const { category } = getCategoryById(userId, item.categoryId);
-	if (!isConcertItem(item, category)) error(400, 'Setlists are only available for artists');
+	if (!listUsesSetlists(category)) {
+		error(400, `Turn on “Concert setlists (setlist.fm)” in the ${category.name} list settings first`);
+	}
 	const sp = url.searchParams;
 	try {
 		const data = await searchSetlists(

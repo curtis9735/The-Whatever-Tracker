@@ -1,3 +1,5 @@
+import fs from 'node:fs';
+import path from 'node:path';
 import { afterEach, describe, expect, it, vi } from 'vitest';
 
 vi.mock('$env/dynamic/private', async () => {
@@ -9,7 +11,7 @@ vi.mock('$env/dynamic/private', async () => {
 });
 
 const { searchSetlists, setlistSearchUrl } = await import('./providers/setlistfm');
-const { isConcertItem, setlistArtist } = await import('./services/concerts');
+const { listUsesSetlists, setlistArtist } = await import('./services/concerts');
 const { rawDb } = await import('./db');
 
 afterEach(() => vi.unstubAllGlobals());
@@ -88,28 +90,81 @@ describe('setlist.fm search', () => {
 	});
 });
 
-describe('which items can look up setlists', () => {
-	const base = { provider: null, providerKind: null, providerId: null, title: 'Ed Sheeran' };
-	const concerts = { providerKinds: ['musicbrainz:artist'], templateKey: 'concerts' };
-	const cheese = { providerKinds: [], templateKey: 'cheese' };
+describe('rate limiting', () => {
+	it('waits and retries once when setlist.fm answers 429', async () => {
+		let calls = 0;
+		vi.stubGlobal(
+			'fetch',
+			vi.fn(async () =>
+				++calls === 1
+					? new Response('{"code":429}', { status: 429 })
+					: new Response(JSON.stringify(edSheeranIndy), { status: 200 })
+			)
+		);
+		const { events } = await searchSetlists({ artist: { name: 'Ed Sheeran' }, year: '2026' });
+		expect(calls).toBe(2);
+		expect(events[0].venue).toBe('Lucas Oil Stadium');
+	}, 15_000);
+});
 
-	it('includes artists typed in by hand in a concerts list, searched by name', () => {
-		expect(isConcertItem(base as never, concerts as never)).toBe(true);
-		expect(setlistArtist(base as never)).toEqual({ name: 'Ed Sheeran' });
+describe('which lists look up setlists', () => {
+	const base = { provider: null, providerKind: null, providerId: null, title: 'Ed Sheeran' };
+
+	it('is a per-list switch', () => {
+		expect(listUsesSetlists({ providerKinds: ['musicbrainz:artist', 'setlistfm:setlist'] })).toBe(true);
+		expect(listUsesSetlists({ providerKinds: ['musicbrainz:artist'] })).toBe(false);
+		expect(listUsesSetlists({ providerKinds: [] })).toBe(false);
 	});
 
-	it('uses the exact MusicBrainz artist when there is one', () => {
+	it('searches hand-added artists by name, and MusicBrainz artists exactly', () => {
+		expect(setlistArtist(base as never)).toEqual({ name: 'Ed Sheeran' });
 		const linked = {
 			...base,
 			provider: 'musicbrainz',
 			providerKind: 'artist',
 			providerId: 'b8a7c51f-362c-4dcb-a259-bc6e0095f0a6'
 		};
-		expect(isConcertItem(linked as never, cheese as never)).toBe(true);
 		expect(setlistArtist(linked as never)).toEqual({ mbid: 'b8a7c51f-362c-4dcb-a259-bc6e0095f0a6' });
 	});
 
-	it('leaves other lists alone', () => {
-		expect(isConcertItem({ ...base, title: 'Brie' } as never, cheese as never)).toBe(false);
+	it('the upgrade turns it on for existing concert lists only (and only once)', () => {
+		const sqlite = rawDb();
+		const user = sqlite
+			.prepare(
+				"INSERT INTO users (username, display_name, password_hash, created_at) VALUES ('mig', 'mig', 'x', 0)"
+			)
+			.run().lastInsertRowid;
+		const add = (slug: string, kinds: string[], template: string | null) =>
+			sqlite
+				.prepare(
+					`INSERT INTO categories (user_id, name, slug, statuses, provider_kinds, template_key, created_at)
+					 VALUES (?, ?, ?, '[]', ?, ?, 0)`
+				)
+				.run(user, slug, slug, JSON.stringify(kinds), template);
+		add('concerts', ['musicbrainz:artist'], 'concerts');
+		add('gigs', ['musicbrainz:artist'], null);
+		add('renamed-concerts', [], 'concerts');
+		add('albums', ['musicbrainz:album'], 'albums');
+		add('cheese', [], 'cheese');
+
+		const migration = fs.readFileSync(path.resolve('drizzle/0003_concert_setlists.sql'), 'utf8');
+		sqlite.exec(migration);
+		sqlite.exec(migration); // running twice must not add it twice
+
+		const kinds = Object.fromEntries(
+			(
+				sqlite.prepare('SELECT slug, provider_kinds FROM categories WHERE user_id = ?').all(user) as {
+					slug: string;
+					provider_kinds: string;
+				}[]
+			).map((r) => [r.slug, JSON.parse(r.provider_kinds)])
+		);
+		expect(kinds).toEqual({
+			concerts: ['musicbrainz:artist', 'setlistfm:setlist'],
+			gigs: ['musicbrainz:artist', 'setlistfm:setlist'],
+			'renamed-concerts': ['setlistfm:setlist'],
+			albums: ['musicbrainz:album'],
+			cheese: []
+		});
 	});
 });
