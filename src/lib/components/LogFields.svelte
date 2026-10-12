@@ -10,7 +10,9 @@
 		dateDefault,
 		locationLabel = 'Where',
 		date = $bindable(),
-		location = $bindable()
+		location = $bindable(),
+		showDate = true,
+		showRating = true
 	}: {
 		scale: RatingScale;
 		logFields: FieldDef[];
@@ -26,6 +28,10 @@
 		locationLabel?: string;
 		date?: string;
 		location?: string;
+		/** Off when the surrounding form asks for the date itself (the Add form's "When") */
+		showDate?: boolean;
+		/** Off when the item's own rating doubles as this log's rating */
+		showRating?: boolean;
 	} = $props();
 
 	// Seed unbound values once from the initial props
@@ -37,10 +43,12 @@
 
 <div class="space-y-4">
 	<div class="grid gap-4 sm:grid-cols-2">
-		<div>
-			<label class="label" for="log_date">Date</label>
-			<input class="input" id="log_date" name="log_date" type="date" required bind:value={date} />
-		</div>
+		{#if showDate}
+			<div>
+				<label class="label" for="log_date">Date</label>
+				<input class="input" id="log_date" name="log_date" type="date" required bind:value={date} />
+			</div>
+		{/if}
 		<div>
 			<label class="label" for="log_location">{locationLabel}</label>
 			<input
@@ -52,13 +60,15 @@
 			/>
 		</div>
 	</div>
-	<RatingInput
-		{scale}
-		name="log_rating"
-		id="log_rating"
-		value={values.rating ?? null}
-		label="Rating this time"
-	/>
+	{#if showRating}
+		<RatingInput
+			{scale}
+			name="log_rating"
+			id="log_rating"
+			value={values.rating ?? null}
+			label="Rating this time"
+		/>
+	{/if}
 	{#if logFields.length}
 		<div class="grid gap-4 sm:grid-cols-2">
 			{#each logFields as def (def.key)}

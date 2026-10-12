@@ -1,6 +1,7 @@
 import { parseCustomFields } from '$lib/fields';
 import { parseRatingInput } from '$lib/ratings';
-import type { FieldDef } from '$lib/types';
+import { isFinished } from '$lib/status';
+import type { FieldDef, StatusDef } from '$lib/types';
 import type { Category } from './db/schema';
 import { parseTagInput, type ItemInput, type LogInput } from './services/items';
 
@@ -85,7 +86,12 @@ export function parseLogForm(
 	};
 }
 
-/** True when the "first log" part of a new-item form was filled in. */
-export function wantsLog(form: FormData) {
-	return form.get('add_log') === 'on';
+/**
+ * The date to record as a new item's first log: only for finished statuses, and only if the
+ * "When" date was left filled in (clearing it means "don't record when").
+ */
+export function firstLogDate(form: FormData, statuses: StatusDef[], status: string | null): string | null {
+	if (!isFinished(statuses, status)) return null;
+	const date = String(form.get('log_date') ?? '').trim();
+	return /^\d{4}-\d{2}-\d{2}$/.test(date) ? date : null;
 }

@@ -6,13 +6,18 @@
 	import ItemForm from '$lib/components/ItemForm.svelte';
 	import LogFields from '$lib/components/LogFields.svelte';
 	import MetadataMatch from '$lib/components/MetadataMatch.svelte';
-	import { KIND_BY_KEY, PROVIDER_LABELS } from '$lib/kinds';
+	import { KIND_BY_KEY, PROVIDER_LABELS, SETLIST_SOURCE } from '$lib/kinds';
+	import { isFinished } from '$lib/status';
 	import type { SearchResult } from '$lib/types';
 
 	let { data, form } = $props();
 	const cat = $derived(data.chosen.category);
-	let addLog = $state(false);
 	let busy = $state(false);
+
+	// Picking a finished status (Completed, Tasted, Seen…) asks "When" instead of a separate log step
+	let status = $state<string | undefined>(undefined);
+	const finished = $derived(isFinished(cat.statuses, status));
+	const setlistNext = $derived(data.setlistReady && cat.providerKinds.includes(SETLIST_SOURCE));
 
 	// Look the name up on this list's metadata sources (e.g. TMDB for Movies) as it's typed
 	// svelte-ignore state_referenced_locally
@@ -35,6 +40,8 @@
 
 	function switchCategory(slug: string) {
 		match = null;
+		status = undefined; // the other list has its own statuses; ItemForm picks its first
+
 		const sp = new URLSearchParams(page.url.searchParams);
 		sp.set('category', slug);
 		// Keep what was typed so far when the form re-renders for the other list
@@ -98,6 +105,7 @@
 				itemFields={data.chosen.itemFields}
 				allTags={data.allTags}
 				bind:title
+				bind:status
 				values={{
 					title: data.defaults.title,
 					subtitle: data.defaults.subtitle,
@@ -110,26 +118,48 @@
 						<MetadataMatch kinds={matchKinds} query={title} bind:selected={match} onselect={onMatch} />
 					{/if}
 				{/snippet}
+				{#snippet afterStatus()}
+					{#if finished}
+						<!-- A finished status means it already happened: record when as the first log -->
+						<div class="space-y-3 rounded-xl border border-border bg-surface-2/50 p-3">
+							<div class="grid gap-3 sm:grid-cols-2 sm:items-end">
+								<div>
+									<label class="label" for="log_date">When</label>
+									<input class="input" id="log_date" name="log_date" type="date" value={data.today} />
+								</div>
+								<p class="hint sm:mb-3">
+									Saved as the first entry in its history, with your rating below. Clear the date to skip.
+								</p>
+							</div>
+							{#if setlistNext}
+								<p class="hint mt-0">
+									After saving, you'll pick the show on setlist.fm to add the venue and setlist.
+								</p>
+							{:else}
+								<details>
+									<summary class="cursor-pointer text-sm font-medium text-accent">
+										More about this time (where, notes, photos)
+									</summary>
+									<div class="mt-3 space-y-4">
+										<LogFields
+											scale={cat.ratingScale}
+											logFields={data.chosen.logFields}
+											dateDefault={data.today}
+											showDate={false}
+											showRating={false}
+										/>
+										<ImagePicker prefix="logimg_" label="Photos from this time" />
+									</div>
+								</details>
+							{/if}
+						</div>
+					{/if}
+				{/snippet}
 			</ItemForm>
 		{/key}
 
 		<div class="card p-4">
 			<ImagePicker prefix="img_" label="Photos" defaultUrl={data.defaults.image} />
-		</div>
-
-		<div class="card p-4">
-			<label class="flex items-center gap-3 font-medium">
-				<input type="checkbox" name="add_log" bind:checked={addLog} class="h-5 w-5 accent-[var(--accent)]" />
-				Log it now (watched, played, tasted, met…)
-			</label>
-			{#if addLog}
-				<div class="mt-4 space-y-4">
-					{#key cat.id}
-						<LogFields scale={cat.ratingScale} logFields={data.chosen.logFields} dateDefault={data.today} />
-					{/key}
-					<ImagePicker prefix="logimg_" label="Photos from this time" />
-				</div>
-			{/if}
 		</div>
 
 		<div class="sticky bottom-20 flex gap-3 md:bottom-4">

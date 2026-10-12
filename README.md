@@ -149,12 +149,15 @@ Search only asks sources that match one of your lists. For example, TV results a
 ## Using it
 
 - **Search:** tap Search, press `/`, or press `Ctrl+K`. Library hits come first, then each source as its results
-  arrive. Tap a result to preview it, choose the list, status and rating, and optionally log it right away. The
-  last row always offers "Create '<what you typed>' in…" for things no source knows about.
+  arrive. Tap a result to preview it, then choose the list, status and rating. The last row always offers
+  "Create '<what you typed>' in…" for things no source knows about.
+- **Adding something you've already done:** when you add an item with a finished status (Completed, Tasted, Seen,
+  Played…), the form asks **When** (today by default) and saves that as the first entry in its history, with
+  your rating. Clear the date to skip it. Planned statuses (Planning, Wishlist, Want to see…) don't ask.
 - **Adding from a list:** in a list with a metadata source (TMDB for Movies and TV, IGDB, BoardGameGeek,
   MusicBrainz), the **Add** form looks the name up as you type. Pick a match and it saves the poster and details
-  along with your rating, log and photos. Anything added without a match can get one later with **Find details on
-  …** on its page.
+  along with your rating and photos. Anything added without a match can get one later with **Find details on …**
+  on its page.
 - **Logs:** each log has a date, a rating for that time, a place, a price, notes, photos and the list's log
   fields. Logging something that was in a "planned" status (wishlist, to watch) moves it to the first "done"
   status automatically.
@@ -162,8 +165,8 @@ Search only asks sources that match one of your lists. For example, TV results a
   (**Me → Integrations**), any list with **Concert setlists (setlist.fm)** ticked under **List settings →
   Metadata sources → When logging** gets the lookup. The Concerts template has it ticked. To search for artists
   in the search bar, also connect MusicBrainz, which only needs an email address or URL as contact info.
-  - **From search:** tick **I went to a show** and pick the date. You land on the artist's page with the show
-    already looked up; if there was one show that day, it's picked automatically.
+  - **When adding the artist** (from search or the Add form): choose **Seen** and the date. You land on the
+    artist's page with the show already looked up; if there was one show that day, it's picked automatically.
   - **On the artist's page:** **Add log** offers the same lookup, searchable by date or year, city and venue.
   - **For an existing log:** use its edit page to attach or change the show.
 

@@ -1,7 +1,8 @@
 import { error, fail, redirect } from '@sveltejs/kit';
 import { getCategoryById, getCategoryBySlug, listCategories } from '$lib/server/services/categories';
 import { addImage, addLog, createItem, imageSourcesFromForm, listUserTags } from '$lib/server/services/items';
-import { parseItemForm, parseLogForm, todayIso, wantsLog } from '$lib/server/forms';
+import { firstLogDate, parseItemForm, parseLogForm, todayIso } from '$lib/server/forms';
+import { canFindSetlists } from '$lib/server/services/concerts';
 import { ImageError } from '$lib/server/images/store';
 import { findExisting, linkToProvider, lookupFailure, parseMatch } from '$lib/server/services/provider-items';
 import type { Actions, PageServerLoad } from './$types';
@@ -40,7 +41,9 @@ export const actions: Actions = {
 
 		const parsed = parseItemForm(form, category, itemFields);
 		if (!parsed.ok) return fail(400, { message: parsed.error });
-		const log = wantsLog(form) ? parseLogForm(form, category, logFields) : null;
+		// A finished status (Completed, Tasted, Seen…) records when it happened as the first log
+		const when = firstLogDate(form, category.statuses, parsed.data.status ?? null);
+		const log = when ? parseLogForm(form, category, logFields) : null;
 		if (log && !log.ok) return fail(400, { message: log.error });
 
 		// A match picked from TMDB etc.: refuse duplicates before creating anything
@@ -69,8 +72,13 @@ export const actions: Actions = {
 				warnings.push(e instanceof ImageError ? e.message : 'One image could not be saved.');
 			}
 		}
-		if (log?.ok) {
-			const created = addLog(userId, item.id, log.data, category.statuses);
+		const params = new URLSearchParams();
+		if (log?.ok && canFindSetlists(item, category)) {
+			// Concerts: the log is made on the artist's page, where setlist.fm fills in venue and songs
+			params.set('log', log.data.date);
+		} else if (log?.ok) {
+			// One rating on the form: the item's rating is also this first log's rating
+			const created = addLog(userId, item.id, { ...log.data, rating: parsed.data.rating }, category.statuses);
 			for (const src of imageSourcesFromForm(form, 'logimg_')) {
 				try {
 					await addImage(userId, { logId: created.id }, src);
@@ -79,6 +87,7 @@ export const actions: Actions = {
 				}
 			}
 		}
-		redirect(303, `/items/${item.id}${warnings.length ? `?warn=${encodeURIComponent(warnings[0])}` : ''}`);
+		if (warnings.length) params.set('warn', warnings[0]);
+		redirect(303, `/items/${item.id}${params.size ? `?${params}` : ''}`);
 	}
 };

@@ -2,6 +2,7 @@
 	import { goto } from '$app/navigation';
 	import { tick } from 'svelte';
 	import { KINDS, PROVIDER_LABELS, SETLIST_SOURCE } from '$lib/kinds';
+	import { isFinished } from '$lib/status';
 	import type { LocalSearchHit, NormalizedMetadata, SearchResult, StatusDef, RatingScale } from '$lib/types';
 	import BarcodeScanner from './BarcodeScanner.svelte';
 	import Icon from './Icon.svelte';
@@ -135,7 +136,6 @@
 	let detailsError = $state('');
 	let addCategoryId = $state<number | null>(null);
 	let addStatus = $state<string>('');
-	let logIt = $state(false);
 	let logDate = $state(today());
 	let adding = $state(false);
 	let addError = $state('');
@@ -166,7 +166,6 @@
 		details = null;
 		detailsError = '';
 		addError = '';
-		logIt = false;
 		logDate = today();
 		mode = 'preview';
 		const cat = categories.find((c) => c.providerKinds.includes(r.kindKey)) ?? categories[0];
@@ -189,6 +188,8 @@
 	// Logging a show into a list with setlist.fm turned on continues on the item's page,
 	// where setlist.fm fills in the details
 	const showFlow = $derived(setlistReady && !!addCategory?.providerKinds.includes(SETLIST_SOURCE));
+	// A finished status (Completed, Seen…) records when as the first log; others add no log
+	const finishedAdd = $derived(!!addCategory && isFinished(addCategory.statuses, addStatus));
 
 	async function add() {
 		if (!preview || !addCategoryId) return;
@@ -196,7 +197,8 @@
 		addError = '';
 		const fd = ratingForm ? new FormData(ratingForm) : null;
 		const rating = fd?.get('rating');
-		const logLater = logIt && showFlow;
+		const when = finishedAdd && logDate ? logDate : null;
+		const logLater = !!when && showFlow;
 		try {
 			const res = await fetch('/api/items/from-provider', {
 				method: 'POST',
@@ -208,13 +210,13 @@
 					categoryId: addCategoryId,
 					status: addStatus || null,
 					rating: rating === '' || rating === null || rating === undefined ? null : Number(rating),
-					logDate: logIt && !logLater ? logDate : null
+					logDate: when && !logLater ? when : null
 				})
 			});
 			const d = await res.json();
 			if (!res.ok) throw new Error(d.message || 'Could not add it');
 			inLibrary = { ...inLibrary, [`${preview.provider}:${preview.kind}:${preview.id}`]: d.id };
-			await go(logLater ? `/items/${d.id}?log=${logDate}` : `/items/${d.id}`);
+			await go(logLater ? `/items/${d.id}?log=${when}` : `/items/${d.id}`);
 		} catch (e) {
 			addError = (e as Error).message;
 		} finally {
@@ -541,26 +543,23 @@
 							{#each addCategory.statuses as s (s.key)}<option value={s.key}>{s.label}</option>{/each}
 						</select>
 					</div>
+					{#if finishedAdd}
+						<!-- Finished status: it already happened, so record when as the first log -->
+						<div>
+							<label class="label" for="add-when">When</label>
+							<input class="input" id="add-when" type="date" bind:value={logDate} />
+							<p class="hint">
+								{showFlow
+									? 'Next, pick the show on setlist.fm to fill in the venue and setlist.'
+									: 'Saved as the first entry in its history. Clear the date to skip.'}
+							</p>
+						</div>
+					{/if}
 					<form bind:this={ratingForm} onsubmit={(e) => e.preventDefault()}>
 						{#key addCategory.id}
 							<RatingInput scale={addCategory.ratingScale} name="rating" id="add-rating" />
 						{/key}
 					</form>
-					<label class="flex items-center gap-2 text-sm">
-						<input type="checkbox" bind:checked={logIt} class="h-4 w-4 accent-[var(--accent)]" />
-						{showFlow ? 'I went to a show' : 'Log it (watched / played / tried)'}
-					</label>
-					{#if logIt}
-						<input
-							class="input"
-							type="date"
-							bind:value={logDate}
-							aria-label={showFlow ? 'Show date' : 'Log date'}
-						/>
-						{#if showFlow}
-							<p class="hint mt-0">Next, pick the show from setlist.fm to fill in the venue and setlist.</p>
-						{/if}
-					{/if}
 				{/if}
 				{#if addError}<p class="error-box">{addError}</p>{/if}
 				<button class="btn btn-primary w-full" onclick={add} disabled={adding || !addCategoryId}>
