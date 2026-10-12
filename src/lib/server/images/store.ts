@@ -2,7 +2,8 @@ import crypto from 'node:crypto';
 import fs from 'node:fs/promises';
 import path from 'node:path';
 import sharp, { type Sharp } from 'sharp';
-import { cfg, userAgent } from '../config';
+import { cfg } from '../config';
+import { userAgent } from '../settings';
 import { fetchPublicImage, UnsafeUrlError } from './ssrf';
 
 export const MAX_UPLOAD_BYTES = 20 * 1024 * 1024;

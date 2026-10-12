@@ -12,6 +12,8 @@ export interface Provider {
 	/** Per-request budget in ms (BGG is slow and strictly rate limited) */
 	timeoutMs: number;
 	enabled(): boolean;
+	/** One uncached request with the current credentials; throws ProviderError on failure. */
+	test(signal?: AbortSignal): Promise<void>;
 	search(q: string, kinds: string[], signal: AbortSignal): Promise<SearchResult[]>;
 	details(kind: string, id: string, signal?: AbortSignal): Promise<NormalizedMetadata>;
 }

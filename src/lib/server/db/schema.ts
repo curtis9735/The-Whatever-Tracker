@@ -192,6 +192,16 @@ export const itemTags = sqliteTable(
 	(t) => [primaryKey({ columns: [t.itemId, t.tagId] }), index('item_tags_tag_idx').on(t.tagId)]
 );
 
+/** App-wide settings edited in the UI (e.g. API keys). Values here override the stack's env vars. */
+export const appSettings = sqliteTable('app_settings', {
+	key: text('key').primaryKey(),
+	value: text('value').notNull(),
+	updatedAt: integer('updated_at', { mode: 'timestamp_ms' })
+		.notNull()
+		.$defaultFn(() => new Date()),
+	updatedBy: integer('updated_by').references(() => users.id, { onDelete: 'set null' })
+});
+
 export const providerCache = sqliteTable('provider_cache', {
 	key: text('key').primaryKey(),
 	value: text('value').notNull(),

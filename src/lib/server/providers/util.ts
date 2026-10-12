@@ -1,9 +1,13 @@
 import { rawDb } from '../db';
 
+/** `auth` means the source rejected our credentials (used to refuse saving a bad key). */
+export type ProviderErrorCode = 'auth' | 'rate' | 'notfound' | 'unreachable' | 'other';
+
 export class ProviderError extends Error {
 	constructor(
 		message: string,
-		public status = 502
+		public status = 502,
+		public code: ProviderErrorCode = 'other'
 	) {
 		super(message);
 	}
@@ -77,14 +81,14 @@ export async function fetchOk(url: string | URL, init: RequestInit & { label: st
 		res = await fetch(url, init);
 	} catch (e) {
 		if ((e as Error).name === 'AbortError' || (e as Error).name === 'TimeoutError') throw e;
-		throw new ProviderError(`${init.label} could not be reached`);
+		throw new ProviderError(`${init.label} could not be reached`, 502, 'unreachable');
 	}
 	if (!res.ok) {
 		if (res.status === 401 || res.status === 403) {
-			throw new ProviderError(`${init.label} rejected the API key (HTTP ${res.status})`, 502);
+			throw new ProviderError(`${init.label} rejected the API key (HTTP ${res.status})`, 502, 'auth');
 		}
-		if (res.status === 404) throw new ProviderError(`${init.label}: not found`, 404);
-		if (res.status === 429) throw new ProviderError(`${init.label} is rate limiting requests`, 503);
+		if (res.status === 404) throw new ProviderError(`${init.label}: not found`, 404, 'notfound');
+		if (res.status === 429) throw new ProviderError(`${init.label} is rate limiting requests`, 503, 'rate');
 		throw new ProviderError(`${init.label} returned HTTP ${res.status}`);
 	}
 	return res;

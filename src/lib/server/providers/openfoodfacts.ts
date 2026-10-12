@@ -1,4 +1,4 @@
-import { userAgent } from '../config';
+import { userAgent } from '../settings';
 import { cached, fetchOk, ProviderError, withTimeout } from './util';
 
 const DAY = 86_400_000;

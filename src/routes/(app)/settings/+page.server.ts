@@ -1,4 +1,4 @@
-import { fail } from '@sveltejs/kit';
+import { error, fail } from '@sveltejs/kit';
 import { eq } from 'drizzle-orm';
 import { db, schema } from '$lib/server/db';
 import {
@@ -10,45 +10,34 @@ import {
 	validatePassword,
 	verifyPassword
 } from '$lib/server/auth';
-import { PROVIDERS } from '$lib/server/providers/registry';
-import { setlistfmEnabled } from '$lib/server/providers/setlistfm';
+import { getIntegration, integrationsView, runIntegrationTest } from '$lib/server/integrations';
+import {
+	credentialKeysFor,
+	credentialSource,
+	saveCredentials,
+	type CredentialKey
+} from '$lib/server/settings';
 import { listBackups } from '$lib/server/backup';
 import { APP_VERSION, cfg } from '$lib/server/config';
 import type { Actions, PageServerLoad } from './$types';
 
 export const load: PageServerLoad = async ({ locals }) => {
-	const integrations = [
-		...PROVIDERS.map((p) => ({
-			id: p.id,
-			label: p.label,
-			env: p.env,
-			docsUrl: p.docsUrl,
-			enabled: p.enabled()
-		})),
-		{
-			id: 'setlistfm',
-			label: 'setlist.fm',
-			env: ['SETLISTFM_API_KEY'],
-			docsUrl: 'https://www.setlist.fm/settings/api',
-			enabled: setlistfmEnabled()
-		},
-		{
-			id: 'openfoodfacts',
-			label: 'Open Food Facts (barcodes)',
-			env: [],
-			docsUrl: 'https://world.openfoodfacts.org/',
-			enabled: true
-		}
-	];
+	const isAdmin = locals.user!.isAdmin;
 	return {
-		integrations,
+		integrations: integrationsView(isAdmin),
 		version: APP_VERSION,
-		backups: locals.user!.isAdmin
-			? listBackups().map((b) => ({ ...b, modified: b.modified.toISOString() }))
-			: [],
-		dataDir: locals.user!.isAdmin ? cfg().dataDir : null
+		backups: isAdmin ? listBackups().map((b) => ({ ...b, modified: b.modified.toISOString() })) : [],
+		dataDir: isAdmin ? cfg().dataDir : null
 	};
 };
+
+function adminIntegration(locals: App.Locals, id: string) {
+	if (!locals.user?.isAdmin) error(403, 'Only admins can change API keys');
+	const integration = getIntegration(id);
+	const keys = credentialKeysFor(id);
+	if (!integration || !keys.length) error(404, 'Unknown integration');
+	return { integration, keys };
+}
 
 export const actions: Actions = {
 	profile: async ({ request, locals }) => {
@@ -59,6 +48,7 @@ export const actions: Actions = {
 		db().update(schema.users).set({ displayName }).where(eq(schema.users.id, locals.user!.id)).run();
 		return { profileSaved: true };
 	},
+
 	password: async ({ request, locals, cookies, url }) => {
 		const form = await request.formData();
 		const current = String(form.get('current') ?? '');
@@ -80,5 +70,69 @@ export const actions: Actions = {
 		const session = createSession(token, user.id);
 		setSessionCookie(cookies, token, session.expiresAt, url.protocol === 'https:');
 		return { passwordSaved: true };
+	},
+
+	/** Saves the fields that were filled in, then tests them; a key the source rejects is rolled back. */
+	saveIntegration: async ({ request, locals }) => {
+		const form = await request.formData();
+		const id = String(form.get('integration') ?? '');
+		const { integration, keys } = adminIntegration(locals, id);
+
+		const changes: Partial<Record<CredentialKey, string>> = {};
+		for (const key of keys) {
+			const value = String(form.get(key) ?? '').trim();
+			if (!value) continue; // blank = keep the current value
+			if (value.length > 500 || /\s/.test(value)) {
+				return fail(400, {
+					integration: id,
+					error: 'That does not look like a valid key (no spaces allowed).'
+				});
+			}
+			changes[key] = value;
+		}
+		if (
+			changes.MUSICBRAINZ_CONTACT &&
+			!/^(https?:\/\/\S+|[^@\s]+@[^@\s]+\.[^@\s]+)$/.test(changes.MUSICBRAINZ_CONTACT)
+		) {
+			return fail(400, { integration: id, error: 'Enter an email address or a URL starting with https://.' });
+		}
+		if (!Object.keys(changes).length) {
+			return fail(400, { integration: id, error: 'Type a new value to save.' });
+		}
+
+		const previous = saveCredentials(changes, locals.user!.id);
+		if (!integration.enabled()) {
+			return { integration: id, success: 'Saved. Fill in the remaining field to switch it on.' };
+		}
+		const result = await runIntegrationTest(id);
+		if (result.ok) return { integration: id, success: 'Saved. The connection works.' };
+		if (result.code === 'auth') {
+			saveCredentials(previous, locals.user!.id);
+			return fail(400, { integration: id, error: `${result.message}. Nothing was saved.` });
+		}
+		return { integration: id, warning: `Saved, but the connection test didn't finish: ${result.message}` };
+	},
+
+	testIntegration: async ({ request, locals }) => {
+		const id = String((await request.formData()).get('integration') ?? '');
+		adminIntegration(locals, id);
+		const result = await runIntegrationTest(id);
+		return result.ok
+			? { integration: id, success: 'The connection works.' }
+			: fail(400, { integration: id, error: result.message });
+	},
+
+	/** Forgets the values saved in the app; the stack's environment variables apply again. */
+	clearIntegration: async ({ request, locals }) => {
+		const id = String((await request.formData()).get('integration') ?? '');
+		const { integration, keys } = adminIntegration(locals, id);
+		saveCredentials(Object.fromEntries(keys.map((k) => [k, null])), locals.user!.id);
+		const fallback = keys.some((k) => credentialSource(k) === 'stack');
+		return {
+			integration: id,
+			success: fallback
+				? 'Removed. Using the value from the Portainer stack again.'
+				: `Removed. ${integration.label} is now switched off.`
+		};
 	}
 };

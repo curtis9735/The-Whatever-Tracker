@@ -1,4 +1,4 @@
-import { cfg } from '../config';
+import { keys } from '../settings';
 import type { NormalizedMetadata, SearchResult } from '$lib/types';
 import type { Provider } from './types';
 import { cached, fetchOk, joinNonEmpty, truncate, withTimeout, yearOf } from './util';
@@ -11,7 +11,7 @@ export function tmdbImage(path: string | null | undefined, size: 'w185' | 'w342'
 }
 
 async function tmdbGet(path: string, params: Record<string, string>, signal?: AbortSignal) {
-	const key = cfg().tmdbKey;
+	const key = keys().tmdbKey;
 	const url = new URL(API + path);
 	for (const [k, v] of Object.entries(params)) url.searchParams.set(k, v);
 	const headers: Record<string, string> = { Accept: 'application/json' };
@@ -169,7 +169,11 @@ export const tmdb: Provider = {
 	env: ['TMDB_API_KEY'],
 	docsUrl: 'https://www.themoviedb.org/settings/api',
 	timeoutMs: 8000,
-	enabled: () => !!cfg().tmdbKey,
+	enabled: () => !!keys().tmdbKey,
+	async test(signal) {
+		// Requires a valid key; answers 401 otherwise
+		await tmdbGet('/configuration', {}, signal);
+	},
 	async search(q, kinds, signal) {
 		const json = await cached(`tmdb:search:${q.toLowerCase()}`, DAY, () =>
 			tmdbGet('/search/multi', { query: q, include_adult: 'false', page: '1' }, signal)

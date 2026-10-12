@@ -1,4 +1,4 @@
-import { cfg, userAgent } from '../config';
+import { keys, userAgent } from '../settings';
 import type { NormalizedMetadata, SearchResult } from '$lib/types';
 import type { Provider } from './types';
 import { cached, createLimiter, fetchOk, joinNonEmpty, ProviderError, withTimeout, yearOf } from './util';
@@ -148,7 +148,11 @@ export const musicbrainz: Provider = {
 	env: ['MUSICBRAINZ_CONTACT'],
 	docsUrl: 'https://musicbrainz.org/doc/MusicBrainz_API/Rate_Limiting',
 	timeoutMs: 10000,
-	enabled: () => !!cfg().musicbrainzContact,
+	enabled: () => !!keys().musicbrainzContact,
+	async test(signal) {
+		// No key to check; this confirms MusicBrainz accepts our User-Agent (Radiohead lookup)
+		await mbGet('/artist/a74b1b7f-71a5-4011-9441-d0b5e4122711', {}, signal);
+	},
 	async search(q, kinds, signal) {
 		const query = luceneEscape(q);
 		const tasks: Promise<SearchResult[]>[] = [];

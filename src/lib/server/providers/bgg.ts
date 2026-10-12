@@ -1,5 +1,5 @@
 import { XMLParser } from 'fast-xml-parser';
-import { cfg, userAgent } from '../config';
+import { keys, userAgent } from '../settings';
 import type { NormalizedMetadata, SearchResult } from '$lib/types';
 import type { Provider } from './types';
 import {
@@ -39,14 +39,14 @@ async function bggGet(path: string, params: Record<string, string>, signal?: Abo
 			() =>
 				fetchOk(url, {
 					headers: {
-						Authorization: `Bearer ${cfg().bggToken}`,
+						Authorization: `Bearer ${keys().bggToken}`,
 						'User-Agent': userAgent(),
 						Accept: 'application/xml'
 					},
 					signal: withTimeout(signal, 15000),
 					label: 'BoardGameGeek'
 				}).catch((e) => {
-					if (e instanceof ProviderError && e.status === 503 && attempt < 2) return null; // 429: back off
+					if (e instanceof ProviderError && e.code === 'rate' && attempt < 2) return null; // 429: back off
 					throw e;
 				}),
 			signal
@@ -169,7 +169,12 @@ export const bgg: Provider = {
 	env: ['BGG_API_TOKEN'],
 	docsUrl: 'https://boardgamegeek.com/applications',
 	timeoutMs: 15000,
-	enabled: () => !!cfg().bggToken,
+	enabled: () => !!keys().bggToken,
+	async test(signal) {
+		// CATAN; uncached so a bad token is noticed
+		const xml = (await bggGet('thing', { id: '13' }, signal)) as { items?: { item?: unknown[] } };
+		if (!xml.items?.item?.length) throw new ProviderError('BoardGameGeek returned an unexpected answer');
+	},
 	async search(q, _kinds, signal): Promise<SearchResult[]> {
 		const hits = await cached(`bgg:search:${q.toLowerCase()}`, 7 * DAY, async () => {
 			const xml = (await bggGet('search', { query: q, type: 'boardgame' }, signal)) as {

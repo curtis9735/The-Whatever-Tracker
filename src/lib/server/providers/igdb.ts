@@ -1,4 +1,4 @@
-import { cfg } from '../config';
+import { keys } from '../settings';
 import type { NormalizedMetadata, SearchResult } from '$lib/types';
 import type { Provider } from './types';
 import { cached, createLimiter, fetchOk, joinNonEmpty, ProviderError, truncate, withTimeout } from './util';
@@ -6,22 +6,35 @@ import { cached, createLimiter, fetchOk, joinNonEmpty, ProviderError, truncate, 
 const DAY = 86_400_000;
 const limiter = createLimiter(260); // IGDB allows 4 requests/second
 
-let token: { value: string; expiresAt: number } | null = null;
+// Remember which credentials the token belongs to, so changing them in Settings takes effect at once
+let token: { value: string; expiresAt: number; forCredentials: string } | null = null;
 
 async function getToken(signal?: AbortSignal) {
-	if (token && token.expiresAt > Date.now() + 60_000) return token.value;
-	const c = cfg();
+	const { igdbClientId, igdbClientSecret } = keys();
+	const forCredentials = `${igdbClientId}:${igdbClientSecret}`;
+	if (token && token.forCredentials === forCredentials && token.expiresAt > Date.now() + 60_000) {
+		return token.value;
+	}
 	const url = new URL('https://id.twitch.tv/oauth2/token');
-	url.searchParams.set('client_id', c.igdbClientId);
-	url.searchParams.set('client_secret', c.igdbClientSecret);
+	url.searchParams.set('client_id', igdbClientId);
+	url.searchParams.set('client_secret', igdbClientSecret);
 	url.searchParams.set('grant_type', 'client_credentials');
-	const res = await fetchOk(url, {
-		method: 'POST',
-		signal: withTimeout(signal, 8000),
-		label: 'Twitch (IGDB login)'
-	});
+	let res: Response;
+	try {
+		res = await fetchOk(url, {
+			method: 'POST',
+			signal: withTimeout(signal, 8000),
+			label: 'Twitch (IGDB login)'
+		});
+	} catch (e) {
+		// Twitch answers an unknown client ID with 400 rather than 401
+		if (e instanceof ProviderError && /HTTP 400/.test(e.message)) {
+			throw new ProviderError('Twitch rejected the client ID (HTTP 400)', 502, 'auth');
+		}
+		throw e;
+	}
 	const json = (await res.json()) as { access_token: string; expires_in: number };
-	token = { value: json.access_token, expiresAt: Date.now() + json.expires_in * 1000 };
+	token = { value: json.access_token, expiresAt: Date.now() + json.expires_in * 1000, forCredentials };
 	return token.value;
 }
 
@@ -32,7 +45,7 @@ async function igdbQuery<T>(endpoint: string, body: string, signal?: AbortSignal
 			const res = await fetchOk(`https://api.igdb.com/v4/${endpoint}`, {
 				method: 'POST',
 				headers: {
-					'Client-ID': cfg().igdbClientId,
+					'Client-ID': keys().igdbClientId,
 					Authorization: `Bearer ${access}`,
 					Accept: 'application/json',
 					'Content-Type': 'text/plain'
@@ -43,7 +56,7 @@ async function igdbQuery<T>(endpoint: string, body: string, signal?: AbortSignal
 			});
 			return (await res.json()) as T;
 		} catch (e) {
-			if (retry && e instanceof ProviderError && /rejected/.test(e.message)) {
+			if (retry && e instanceof ProviderError && e.code === 'auth') {
 				token = null; // expired or revoked token: log in again once
 				return igdbQuery<T>(endpoint, body, signal, false);
 			}
@@ -142,7 +155,10 @@ export const igdb: Provider = {
 	env: ['IGDB_CLIENT_ID', 'IGDB_CLIENT_SECRET'],
 	docsUrl: 'https://api-docs.igdb.com/#account-creation',
 	timeoutMs: 9000,
-	enabled: () => !!(cfg().igdbClientId && cfg().igdbClientSecret),
+	enabled: () => !!(keys().igdbClientId && keys().igdbClientSecret),
+	async test(signal) {
+		await igdbQuery('games', 'fields id; limit 1;', signal);
+	},
 	async search(q, _kinds, signal) {
 		const games = await cached(`igdb:search:${q.toLowerCase()}`, DAY, () =>
 			igdbQuery<IgdbGame[]>(

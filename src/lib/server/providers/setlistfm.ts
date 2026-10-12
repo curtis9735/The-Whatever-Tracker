@@ -1,4 +1,4 @@
-import { cfg } from '../config';
+import { keys } from '../settings';
 import type { SetlistEvent } from '$lib/types';
 import { cached, createLimiter, fetchOk, ProviderError, withTimeout } from './util';
 
@@ -8,7 +8,24 @@ const DAY = 86_400_000;
 const limiter = createLimiter(600);
 
 export function setlistfmEnabled() {
-	return !!cfg().setlistfmKey;
+	return !!keys().setlistfmKey;
+}
+
+function headers() {
+	return { 'x-api-key': keys().setlistfmKey, Accept: 'application/json', 'Accept-Language': 'en' };
+}
+
+/** Uncached artist lookup (Radiohead) to check the key. */
+export async function testSetlistfm(signal?: AbortSignal) {
+	await limiter(
+		() =>
+			fetchOk(`${API}/artist/a74b1b7f-71a5-4011-9441-d0b5e4122711`, {
+				headers: headers(),
+				signal: withTimeout(signal, 10000),
+				label: 'setlist.fm'
+			}),
+		signal
+	);
 }
 
 interface RawSetlist {
@@ -76,13 +93,13 @@ export async function searchSetlists(
 			let res: Response;
 			try {
 				res = await fetchOk(url, {
-					headers: { 'x-api-key': cfg().setlistfmKey, Accept: 'application/json', 'Accept-Language': 'en' },
+					headers: headers(),
 					signal: withTimeout(signal, 10000),
 					label: 'setlist.fm'
 				});
 			} catch (e) {
 				// setlist.fm answers "no matches" with a 404
-				if (e instanceof ProviderError && e.status === 404) return { events: [], total: 0 };
+				if (e instanceof ProviderError && e.code === 'notfound') return { events: [], total: 0 };
 				throw e;
 			}
 			const json = (await res.json()) as { setlist?: RawSetlist[]; total?: number };

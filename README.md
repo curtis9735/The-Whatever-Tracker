@@ -61,7 +61,7 @@ You'll see something like `uid=1026(you) gid=100(users)`. Those are `PUID=1026` 
 2. Paste in the contents of [`docker-compose.yml`](docker-compose.yml).
 3. Under **Environment variables**, switch to **Advanced mode** and paste the variables from
    [`.env.example`](.env.example), filled in. At minimum you need `ORIGIN`, `PUID` and `PGID`.
-   Add API keys for the sources you want (see below).
+   API keys can go here too, or you can add them later inside the app (see below).
 4. Click **Deploy the stack**.
 5. Open the container's **Logs**. You'll see a box with a **setup code**. You'll need it in a minute.
 
@@ -117,8 +117,20 @@ Back up the whole folder with **Hyper Backup**. To restore, stop the stack, repl
 
 ## Metadata sources (API keys)
 
-Every source is optional. A source with no key is simply left out of search, and **Me → Integrations** shows
-which ones are connected.
+Every source is optional. A source with no key is simply left out of search.
+
+**Entering keys in the app (admins):** go to **Me → Integrations**, click **Set up** (or **Change**) next to a
+source, paste the key and click **Save & test**. The app tries the key right away:
+
+- If the source rejects it, nothing is saved.
+- If the source can't be reached (an outage, say), the key is saved and you're told the test didn't finish.
+
+Keys saved in the app take priority over the ones in the Portainer stack. **Remove saved key** switches back to
+the stack's value, or turns the source off if the stack has none. Saved keys live in the app's database on your
+NAS (so they're in its backups too). After saving, the app only ever shows the last 4 characters.
+
+**Or in the Portainer stack:** set the variables below and update the stack. Household members who aren't admins
+can see which sources are connected, but can't view or change keys.
 
 | Source          | Gives you                     | How to get access                                                                                                                      | Variables                                       |
 | --------------- | ----------------------------- | -------------------------------------------------------------------------------------------------------------------------------------- | ----------------------------------------------- |

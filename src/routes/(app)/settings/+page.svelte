@@ -1,6 +1,7 @@
 <script lang="ts">
 	import { enhance } from '$app/forms';
 	import Icon from '$lib/components/Icon.svelte';
+	import IntegrationRow from '$lib/components/IntegrationRow.svelte';
 
 	let { data, form } = $props();
 
@@ -88,32 +89,22 @@
 
 	<section class="card p-4 sm:p-5">
 		<h2 class="mb-1 font-semibold">Integrations</h2>
-		<p class="mb-4 text-sm text-muted">
-			API keys are set as environment variables on the container (in the Portainer stack). Sources without a
-			key are skipped by search.
+		<p class="mb-2 text-sm text-muted">
+			Sources without a key are skipped by search.
+			{#if data.user.isAdmin}
+				Keys you save here take priority over the ones in the Portainer stack. They're stored in the app's
+				database on your NAS (and its backups), and are never shown in full again.
+			{:else}
+				Only an admin can change keys.
+			{/if}
 		</p>
 		<ul class="divide-y divide-border">
 			{#each data.integrations as i (i.id)}
-				<li class="flex flex-wrap items-center gap-x-3 gap-y-1 py-3">
-					<span
-						class="h-2.5 w-2.5 rounded-full {i.enabled ? 'bg-emerald-500' : 'bg-border'}"
-						aria-hidden="true"
-					></span>
-					<span class="font-medium">{i.label}</span>
-					<span class="text-sm text-muted">{i.enabled ? 'Connected' : 'Not configured'}</span>
-					<span class="ml-auto flex items-center gap-2">
-						{#each i.env as e (e)}<code class="rounded bg-surface-2 px-1.5 py-0.5 text-xs">{e}</code>{/each}
-						<a
-							class="text-accent"
-							href={i.docsUrl}
-							target="_blank"
-							rel="noopener noreferrer"
-							aria-label="Where to get a key for {i.label}"
-						>
-							<Icon name="external" size={14} />
-						</a>
-					</span>
-				</li>
+				<IntegrationRow
+					integration={i}
+					isAdmin={data.user.isAdmin}
+					result={form && 'integration' in form && form.integration === i.id ? form : null}
+				/>
 			{/each}
 		</ul>
 	</section>

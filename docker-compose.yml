@@ -24,7 +24,8 @@ services:
       # adapter-node's default limit is 512K, far too small for phone photos
       BODY_SIZE_LIMIT: 25M
       TZ: ${TZ:-America/New_York}
-      # Metadata sources: leave any blank to switch that source off
+      # Metadata sources (optional). You can instead enter keys in the app under
+      # Me → Integrations; keys saved there take priority over these.
       TMDB_API_KEY: ${TMDB_API_KEY:-}
       IGDB_CLIENT_ID: ${IGDB_CLIENT_ID:-}
       IGDB_CLIENT_SECRET: ${IGDB_CLIENT_SECRET:-}
