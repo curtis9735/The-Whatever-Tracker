@@ -2,6 +2,7 @@
 	import { enhance } from '$app/forms';
 	import { page } from '$app/state';
 	import Icon from '$lib/components/Icon.svelte';
+	import IconPicker from '$lib/components/IconPicker.svelte';
 	import { FIELD_TYPES } from '$lib/fields';
 	import { SCALES } from '$lib/ratings';
 	import type { StatusGroup } from '$lib/types';
@@ -12,8 +13,12 @@
 	// Editable status list (serialized into a hidden input on save); reset whenever the page data changes
 	// svelte-ignore state_referenced_locally
 	let statuses = $state(data.category.statuses.map((s) => ({ ...s })));
+	// The name as typed, so the icon picker can suggest matching icons
+	// svelte-ignore state_referenced_locally
+	let nameDraft = $state(data.category.name);
 	$effect(() => {
 		statuses = data.category.statuses.map((s) => ({ ...s }));
+		nameDraft = data.category.name;
 	});
 	const GROUPS: { value: StatusGroup; label: string }[] = [
 		{ value: 'planned', label: 'Planned (wishlist, to-do)' },
@@ -53,11 +58,13 @@
 		<div class="flex gap-3">
 			<div class="w-20">
 				<label class="label" for="icon">Icon</label>
-				<input class="input text-center text-xl" id="icon" name="icon" value={c.icon} maxlength="8" />
+				{#key c.id}
+					<IconPicker name="icon" value={c.icon} hint={nameDraft} />
+				{/key}
 			</div>
 			<div class="flex-1">
 				<label class="label" for="name">Name</label>
-				<input class="input" id="name" name="name" value={c.name} required maxlength="60" />
+				<input class="input" id="name" name="name" bind:value={nameDraft} required maxlength="60" />
 			</div>
 		</div>
 

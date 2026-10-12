@@ -1,5 +1,12 @@
 <script lang="ts">
+	import IconPicker from '$lib/components/IconPicker.svelte';
+	import { suggestIcons } from '$lib/icons';
+
 	let { data, form } = $props();
+
+	let name = $state('');
+	let icon = $state('📦');
+	const suggestions = $derived(suggestIcons(name, 8));
 </script>
 
 <svelte:head><title>New list · The Whatever Tracker</title></svelte:head>
@@ -13,23 +20,42 @@
 		<p class="mb-4 text-sm text-muted">
 			Anything at all: perfumes, hikes, coffee beans, ramen shops. You'll add your own fields next.
 		</p>
-		<form method="POST" action="?/blank" class="flex flex-wrap gap-2">
-			<input
-				class="input w-16 text-center text-xl"
-				name="icon"
-				value="📦"
-				maxlength="8"
-				aria-label="Icon (emoji)"
-			/>
-			<input
-				class="input min-w-0 flex-1"
-				name="name"
-				placeholder="e.g. Coffee beans"
-				required
-				maxlength="60"
-				aria-label="List name"
-			/>
-			<button class="btn btn-primary">Create</button>
+		<form method="POST" action="?/blank">
+			<div class="flex gap-2">
+				<div class="w-16 shrink-0">
+					<IconPicker name="icon" id="new-icon" bind:value={icon} hint={name} />
+				</div>
+				<input
+					class="input min-w-0 flex-1"
+					name="name"
+					bind:value={name}
+					placeholder="e.g. Coffee beans"
+					required
+					maxlength="60"
+					aria-label="List name"
+				/>
+				<button class="btn btn-primary">Create</button>
+			</div>
+			{#if suggestions.length}
+				<div class="mt-3 flex flex-wrap items-center gap-1">
+					<span class="mr-1 text-xs text-muted">Suggested icons:</span>
+					{#each suggestions as s (s.emoji)}
+						<button
+							type="button"
+							class="flex h-9 w-9 items-center justify-center rounded-lg text-xl hover:bg-surface-2 {icon ===
+							s.emoji
+								? 'bg-accent-soft ring-2 ring-accent'
+								: ''}"
+							onclick={() => (icon = s.emoji)}
+							title={s.name}
+							aria-label="Use {s.name} icon"
+							aria-pressed={icon === s.emoji}
+						>
+							{s.emoji}
+						</button>
+					{/each}
+				</div>
+			{/if}
 		</form>
 	</section>
 

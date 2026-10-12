@@ -13,6 +13,7 @@ import { deleteItem } from '$lib/server/services/items';
 import { enabledKinds } from '$lib/server/providers/registry';
 import { setlistfmEnabled } from '$lib/server/providers/setlistfm';
 import { CATEGORY_COLORS, KINDS, LOG_SOURCES } from '$lib/kinds';
+import { cleanIcon } from '$lib/icons';
 import { FIELD_TYPES, fieldKey, slugify } from '$lib/fields';
 import type { FieldType, RatingScale } from '$lib/types';
 import type { Actions, PageServerLoad } from './$types';
@@ -96,10 +97,7 @@ export const actions: Actions = {
 
 		const slug = updateCategory(userId, category.id, {
 			name,
-			icon:
-				String(form.get('icon') ?? '')
-					.trim()
-					.slice(0, 8) || '📦',
+			icon: cleanIcon(form.get('icon')),
 			color: color in CATEGORY_COLORS ? color : 'slate',
 			ratingScale,
 			statuses,

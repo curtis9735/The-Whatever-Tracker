@@ -2,6 +2,7 @@ import { fail, redirect } from '@sveltejs/kit';
 import { createCategory, createCategoryFromTemplate } from '$lib/server/services/categories';
 import { DEFAULT_STATUSES, TEMPLATES, TEMPLATE_BY_KEY } from '$lib/server/templates';
 import { CATEGORY_COLORS } from '$lib/kinds';
+import { cleanIcon } from '$lib/icons';
 import type { Actions, PageServerLoad } from './$types';
 
 export const load: PageServerLoad = async () => ({
@@ -20,10 +21,7 @@ export const actions: Actions = {
 		const name = String(form.get('name') ?? '')
 			.trim()
 			.slice(0, 60);
-		const icon =
-			String(form.get('icon') ?? '')
-				.trim()
-				.slice(0, 8) || '📦';
+		const icon = cleanIcon(form.get('icon'));
 		if (!name) return fail(400, { message: 'Give the list a name.' });
 		const color =
 			Object.keys(CATEGORY_COLORS)[Math.floor(Math.random() * Object.keys(CATEGORY_COLORS).length)];
