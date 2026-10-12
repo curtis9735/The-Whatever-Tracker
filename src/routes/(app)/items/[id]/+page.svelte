@@ -1,11 +1,9 @@
 <script lang="ts">
-	import { tick } from 'svelte';
 	import { enhance } from '$app/forms';
-	import { goto } from '$app/navigation';
-	import { page } from '$app/state';
 	import { formatFieldValue } from '$lib/fields';
 	import { imageSrc } from '$lib/images';
 	import { categoryColor, PROVIDER_LABELS } from '$lib/kinds';
+	import { setlistSections } from '$lib/setlists';
 	import type { SetlistEvent, MetadataFact, SearchResult } from '$lib/types';
 	import Icon from '$lib/components/Icon.svelte';
 	import ImagePicker from '$lib/components/ImagePicker.svelte';
@@ -58,20 +56,6 @@
 			logLocation = [e.venue, e.city].filter(Boolean).join(', ');
 		}
 	}
-
-	// Arriving with ?log=YYYY-MM-DD (e.g. right after adding an artist from search): open the
-	// log form on that day and, for concerts, look the show up on setlist.fm straight away
-	let pickerDate = $state<string | null>(null);
-	$effect(() => {
-		const d = data.openLogDate;
-		if (!d) return;
-		logOpen = true;
-		logDate = d;
-		pickerDate = d;
-		tick().then(() =>
-			document.getElementById('add-log')?.scrollIntoView({ behavior: 'smooth', block: 'start' })
-		);
-	});
 
 	function pretty(d: string) {
 		return new Date(`${d}T00:00:00`).toLocaleDateString(undefined, { dateStyle: 'medium' });
@@ -423,24 +407,14 @@
 									setlist = null;
 									logDate = undefined;
 									logLocation = undefined;
-									pickerDate = null;
 									logFormKey++;
-									// Drop ?log=… so a reload doesn't open the form again
-									if (page.url.searchParams.has('log')) {
-										goto(page.url.pathname, { replaceState: true, noScroll: true, keepFocus: true });
-									}
 								}
 							};
 						}}
 					>
 						{#if form?.logError}<p class="error-box">{form.logError}</p>{/if}
 						{#if data.canSetlist}
-							<SetlistPicker
-								itemId={item.id}
-								initialDate={pickerDate}
-								bind:selected={setlist}
-								onpick={onSetlist}
-							/>
+							<SetlistPicker itemId={item.id} bind:selected={setlist} onpick={onSetlist} />
 							<input type="hidden" name="log_external" value={setlist ? JSON.stringify({ setlist }) : ''} />
 						{/if}
 						<LogFields
@@ -465,7 +439,7 @@
 				<p class="text-sm text-muted">No logs yet. Add one each time you watch, play, taste or meet it.</p>
 			{:else}
 				<ol class="relative space-y-4 border-l-2 border-border pl-5">
-					{#each data.logs as log (log.id)}
+					{#each data.logs as log, li (log.id)}
 						{@const sl = (log.external as { setlist?: SetlistEvent } | null)?.setlist}
 						<li class="relative">
 							<span class="absolute top-1.5 -left-[27px] h-3 w-3 rounded-full border-2 border-bg bg-accent"
@@ -495,28 +469,54 @@
 								{#if log.notes}<p class="mt-2 text-sm whitespace-pre-line">{log.notes}</p>{/if}
 								{#if log.price !== null}<p class="mt-1 text-xs text-muted">Paid {log.price}</p>{/if}
 								{#if sl}
-									<details class="mt-3 rounded-lg bg-surface-2 p-3 text-sm">
+									<!-- The newest show's setlist is open; older ones expand on tap -->
+									<details class="mt-3 rounded-lg bg-surface-2 p-3 text-sm" open={li === 0}>
 										<summary class="cursor-pointer font-medium">
-											<Icon name="music" size={14} class="inline" /> Setlist · {sl.songs.length} songs{sl.tour
+											<Icon name="music" size={14} class="inline" />
+											{sl.songs.length ? `Setlist · ${sl.songs.length} songs` : 'Setlist'}{sl.tour
 												? ` · ${sl.tour}`
 												: ''}
 										</summary>
-										<ol class="mt-2 list-decimal space-y-0.5 pl-6">
-											{#each sl.songs as s, i (i)}
-												<li>
-													{s.name}{#if s.cover}<span class="text-muted">
-															({s.cover} cover)</span
-														>{/if}{#if s.set}<span class="text-xs text-muted"> · {s.set}</span>{/if}
-												</li>
-											{/each}
-										</ol>
-										{#if sl.url}<a
-												class="mt-2 inline-block text-accent"
-												href={sl.url}
-												target="_blank"
-												rel="noopener noreferrer">View on setlist.fm</a
-											>{/if}
+										{#each setlistSections(sl.songs) as sec, si (si)}
+											{#if sec.label}
+												<p class="mt-3 text-xs font-semibold tracking-wide text-muted uppercase">
+													{sec.label}
+												</p>
+											{/if}
+											<ol class="mt-2 list-decimal space-y-0.5 pl-6" start={sec.songs[0].n}>
+												{#each sec.songs as s (s.n)}
+													<li>
+														{s.name}{#if s.cover}<span class="text-muted">
+																({s.cover} cover)</span
+															>{/if}{#if s.info}<span class="text-xs text-muted"> · {s.info}</span>{/if}
+													</li>
+												{/each}
+											</ol>
+										{/each}
+										{#if !sl.songs.length}
+											<p class="mt-2 text-muted">
+												setlist.fm has this show but no songs yet. Fans usually add them within a few days.
+											</p>
+										{/if}
+										<div class="mt-3 flex flex-wrap items-center gap-3">
+											{#if sl.url}<a
+													class="text-accent"
+													href={sl.url}
+													target="_blank"
+													rel="noopener noreferrer">View on setlist.fm</a
+												>{/if}
+											{#if data.canSetlist}
+												<form method="POST" action="?/refreshSetlist" use:enhance>
+													<input type="hidden" name="logId" value={log.id} />
+													<button class="text-accent hover:underline">Check for updates</button>
+												</form>
+											{/if}
+										</div>
 									</details>
+								{:else if data.canSetlist}
+									<a href="/logs/{log.id}/edit" class="btn btn-sm mt-3">
+										<Icon name="music" size={14} /> Find the setlist
+									</a>
 								{/if}
 								{#if log.images.length}
 									<div class="mt-3 flex flex-wrap gap-2">

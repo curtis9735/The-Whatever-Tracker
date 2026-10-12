@@ -17,7 +17,7 @@
 	// Picking a finished status (Completed, Tasted, Seen…) asks "When" instead of a separate log step
 	let status = $state<string | undefined>(undefined);
 	const finished = $derived(isFinished(cat.statuses, status));
-	const setlistNext = $derived(data.setlistReady && cat.providerKinds.includes(SETLIST_SOURCE));
+	const setlistShow = $derived(data.setlistReady && cat.providerKinds.includes(SETLIST_SOURCE));
 
 	// Look the name up on this list's metadata sources (e.g. TMDB for Movies) as it's typed
 	// svelte-ignore state_referenced_locally
@@ -131,27 +131,25 @@
 									Saved as the first entry in its history, with your rating below. Clear the date to skip.
 								</p>
 							</div>
-							{#if setlistNext}
-								<p class="hint mt-0">
-									After saving, you'll pick the show on setlist.fm to add the venue and setlist.
-								</p>
-							{:else}
-								<details>
-									<summary class="cursor-pointer text-sm font-medium text-accent">
-										More about this time (where, notes, photos)
-									</summary>
-									<div class="mt-3 space-y-4">
-										<LogFields
-											scale={cat.ratingScale}
-											logFields={data.chosen.logFields}
-											dateDefault={data.today}
-											showDate={false}
-											showRating={false}
-										/>
-										<ImagePicker prefix="logimg_" label="Photos from this time" />
-									</div>
-								</details>
+							{#if setlistShow}
+								<p class="hint mt-0">The show's venue and setlist are pulled from setlist.fm for that day.</p>
 							{/if}
+							<details>
+								<summary class="cursor-pointer text-sm font-medium text-accent">
+									More about this time (where, notes, photos)
+								</summary>
+								<div class="mt-3 space-y-4">
+									<LogFields
+										scale={cat.ratingScale}
+										logFields={data.chosen.logFields}
+										dateDefault={data.today}
+										showDate={false}
+										showRating={false}
+										locationLabel={setlistShow ? 'Venue' : 'Where'}
+									/>
+									<ImagePicker prefix="logimg_" label="Photos from this time" />
+								</div>
+							</details>
 						</div>
 					{/if}
 				{/snippet}

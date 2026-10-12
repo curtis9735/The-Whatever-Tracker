@@ -1,8 +1,8 @@
 import { error, fail, redirect } from '@sveltejs/kit';
 import { getCategoryById, getCategoryBySlug, listCategories } from '$lib/server/services/categories';
-import { addImage, addLog, createItem, imageSourcesFromForm, listUserTags } from '$lib/server/services/items';
+import { addImage, createItem, imageSourcesFromForm, listUserTags } from '$lib/server/services/items';
 import { firstLogDate, parseItemForm, parseLogForm, todayIso } from '$lib/server/forms';
-import { canFindSetlists } from '$lib/server/services/concerts';
+import { addLogWithShow, afterAddPath, SHOW_LOOKUP_FAILED } from '$lib/server/services/concerts';
 import { ImageError } from '$lib/server/images/store';
 import { findExisting, linkToProvider, lookupFailure, parseMatch } from '$lib/server/services/provider-items';
 import type { Actions, PageServerLoad } from './$types';
@@ -72,22 +72,26 @@ export const actions: Actions = {
 				warnings.push(e instanceof ImageError ? e.message : 'One image could not be saved.');
 			}
 		}
-		const params = new URLSearchParams();
-		if (log?.ok && canFindSetlists(item, category)) {
-			// Concerts: the log is made on the artist's page, where setlist.fm fills in venue and songs
-			params.set('log', log.data.date);
-		} else if (log?.ok) {
-			// One rating on the form: the item's rating is also this first log's rating
-			const created = addLog(userId, item.id, { ...log.data, rating: parsed.data.rating }, category.statuses);
+		if (log?.ok) {
+			// One rating on the form: the item's rating is also this first log's rating.
+			// Concerts: the setlist.fm show from that day is attached when there's exactly one.
+			const first = await addLogWithShow(userId, item.id, category, {
+				...log.data,
+				rating: parsed.data.rating
+			});
 			for (const src of imageSourcesFromForm(form, 'logimg_')) {
 				try {
-					await addImage(userId, { logId: created.id }, src);
+					await addImage(userId, { logId: first.log.id }, src);
 				} catch (e) {
 					warnings.push(e instanceof ImageError ? e.message : 'One image could not be saved.');
 				}
 			}
+			if (first.show === 'several') redirect(303, afterAddPath(item.id, first.log.id, first.show));
+			if (first.show === 'failed') warnings.push(SHOW_LOOKUP_FAILED);
 		}
-		if (warnings.length) params.set('warn', warnings[0]);
-		redirect(303, `/items/${item.id}${params.size ? `?${params}` : ''}`);
+		redirect(
+			303,
+			`/items/${item.id}${warnings.length ? `?${new URLSearchParams({ warn: warnings[0] })}` : ''}`
+		);
 	}
 };

@@ -55,6 +55,12 @@
 		{#if form?.message}<p class="error-box">{form.message}</p>{/if}
 
 		{#if data.canSetlist}
+			{#if data.pick && !existing}
+				<p class="rounded-xl border border-border bg-surface-2/50 p-3 text-sm">
+					Saved. setlist.fm lists more than one {data.item.title} show that day, so pick yours below to add its
+					venue and setlist.
+				</p>
+			{/if}
 			<!-- Attach, change or remove the setlist.fm show for this log -->
 			<SetlistPicker
 				itemId={data.item.id}

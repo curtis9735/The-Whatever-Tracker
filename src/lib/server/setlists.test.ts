@@ -11,7 +11,10 @@ vi.mock('$env/dynamic/private', async () => {
 });
 
 const { searchSetlists, setlistSearchUrl } = await import('./providers/setlistfm');
-const { listUsesSetlists, setlistArtist } = await import('./services/concerts');
+const { addLogWithShow, afterAddPath, listUsesSetlists, setlistArtist } = await import('./services/concerts');
+const { createItem, getOwnedItem } = await import('./services/items');
+const { getCategoryById } = await import('./services/categories');
+const { setlistSections } = await import('$lib/setlists');
 const { rawDb } = await import('./db');
 
 afterEach(() => vi.unstubAllGlobals());
@@ -76,6 +79,26 @@ describe('setlist.fm search', () => {
 		expect((init.headers as Record<string, string>)['x-api-key']).toBe('test-key');
 	});
 
+	it('shows state codes only where people use them', async () => {
+		const munich = {
+			...edSheeranIndy.setlist[0],
+			eventDate: '31-08-2024',
+			venue: {
+				name: 'Sonderfreifläche Messe',
+				city: { name: 'Munich', stateCode: '02', country: { code: 'DE', name: 'Germany' } }
+			}
+		};
+		vi.stubGlobal(
+			'fetch',
+			vi.fn(
+				async () => new Response(JSON.stringify({ ...edSheeranIndy, setlist: [munich] }), { status: 200 })
+			)
+		);
+		const { events } = await searchSetlists({ artist: { name: 'Adele' }, date: '2024-08-31' });
+		expect(events[0].city).toBe('Munich');
+		expect(events[0].country).toBe('Germany');
+	}, 15_000);
+
 	it('caches "no setlist yet" only briefly, since fans add setlists after the show', async () => {
 		vi.stubGlobal(
 			'fetch',
@@ -105,6 +128,137 @@ describe('rate limiting', () => {
 		expect(calls).toBe(2);
 		expect(events[0].venue).toBe('Lucas Oil Stadium');
 	}, 15_000);
+});
+
+describe('adding a concert saves the show with it', () => {
+	const sqlite = rawDb();
+	const user = Number(
+		sqlite
+			.prepare(
+				"INSERT INTO users (username, display_name, password_hash, created_at) VALUES ('fan', 'fan', 'x', 0)"
+			)
+			.run().lastInsertRowid
+	);
+	const statuses = [
+		{ key: 'want', label: 'Want to see', group: 'planned' },
+		{ key: 'seen', label: 'Seen', group: 'done' }
+	];
+	const catId = Number(
+		sqlite
+			.prepare(
+				`INSERT INTO categories (user_id, name, slug, statuses, provider_kinds, created_at)
+				 VALUES (?, 'Concerts', 'concerts', ?, ?, 0)`
+			)
+			.run(user, JSON.stringify(statuses), JSON.stringify(['musicbrainz:artist', 'setlistfm:setlist']))
+			.lastInsertRowid
+	);
+	const category = () => getCategoryById(user, catId).category;
+	let n = 0;
+	const artist = () =>
+		createItem(user, {
+			categoryId: catId,
+			title: 'Ed Sheeran',
+			status: 'want',
+			provider: 'musicbrainz',
+			providerKind: 'artist',
+			// Unique per test (one library entry per MusicBrainz artist)
+			providerId: `b8a7c51f-362c-4dcb-a259-bc6e0095f${String(++n).padStart(3, '0')}`
+		});
+	const answer = (body: unknown, status = 200) =>
+		vi.stubGlobal(
+			'fetch',
+			vi.fn(async () => new Response(JSON.stringify(body), { status }))
+		);
+
+	it('attaches the one show that day: venue, city and setlist', async () => {
+		answer(edSheeranIndy);
+		const item = artist();
+		const { log, show } = await addLogWithShow(user, item.id, category(), { date: '2026-10-10', rating: 90 });
+		expect(show).toBe('attached');
+		expect(log.location).toBe('Lucas Oil Stadium, Indianapolis, IN');
+		expect(log.rating).toBe(90);
+		const setlist = (log.external as { setlist: { songs: unknown[]; tour: string } }).setlist;
+		expect(setlist.songs).toHaveLength(2);
+		expect(setlist.tour).toBe('Loop Tour');
+		// Logging a "Want to see" artist marks them Seen
+		expect(getOwnedItem(user, item.id).status).toBe('seen');
+		expect(afterAddPath(item.id, log.id, show)).toBe(`/items/${item.id}`);
+	}, 15_000);
+
+	it('keeps a venue the user typed', async () => {
+		answer({ ...edSheeranIndy, setlist: [{ ...edSheeranIndy.setlist[0], eventDate: '09-10-2026' }] });
+		const { log } = await addLogWithShow(user, artist().id, category(), {
+			date: '2026-10-09',
+			location: 'Section 112'
+		});
+		expect(log.location).toBe('Section 112');
+		expect(log.external).toHaveProperty('setlist');
+	}, 15_000);
+
+	it('still saves the date when setlist.fm has nothing yet', async () => {
+		answer({ code: 404 }, 404);
+		const item = artist();
+		const { log, show } = await addLogWithShow(user, item.id, category(), { date: '2026-10-08' });
+		expect(show).toBe('none');
+		expect(log.date).toBe('2026-10-08');
+		expect(log.external).toBeNull();
+		expect(afterAddPath(item.id, log.id, show)).toBe(`/items/${item.id}`);
+	}, 15_000);
+
+	it('sends the user to pick when there were several shows that day', async () => {
+		const two = { ...edSheeranIndy.setlist[0], eventDate: '07-10-2026' };
+		answer({ ...edSheeranIndy, total: 2, setlist: [two, { ...two, id: '2b41a998' }] });
+		const item = artist();
+		const { log, show } = await addLogWithShow(user, item.id, category(), { date: '2026-10-07' });
+		expect(show).toBe('several');
+		expect(log.external).toBeNull();
+		expect(afterAddPath(item.id, log.id, show)).toBe(`/logs/${log.id}/edit?pick=1`);
+	}, 15_000);
+
+	it('saves the log and warns when setlist.fm is unreachable', async () => {
+		vi.stubGlobal(
+			'fetch',
+			vi.fn(async () => {
+				throw new TypeError('fetch failed');
+			})
+		);
+		const item = artist();
+		const { log, show } = await addLogWithShow(user, item.id, category(), { date: '2026-10-06' });
+		expect(show).toBe('failed');
+		expect(log.date).toBe('2026-10-06');
+		expect(afterAddPath(item.id, log.id, show)).toContain('warn=');
+	}, 15_000);
+
+	it('does not touch setlist.fm for other lists', async () => {
+		const fetchMock = vi.fn();
+		vi.stubGlobal('fetch', fetchMock);
+		const { show } = await addLogWithShow(
+			user,
+			artist().id,
+			{ ...category(), providerKinds: [] },
+			{
+				date: '2026-10-05'
+			}
+		);
+		expect(show).toBe('off');
+		expect(fetchMock).not.toHaveBeenCalled();
+	});
+});
+
+describe('showing a setlist', () => {
+	it('groups songs by set and numbers them straight through', () => {
+		const sections = setlistSections([
+			{ name: 'Castle on the Hill' },
+			{ name: 'Shape of You' },
+			{ name: 'Perfect', set: 'Encore' },
+			{ name: 'Bad Habits', set: 'Encore' }
+		]);
+		expect(sections.map((s) => s.label)).toEqual([undefined, 'Encore']);
+		expect(sections[1].songs.map((s) => [s.n, s.name])).toEqual([
+			[3, 'Perfect'],
+			[4, 'Bad Habits']
+		]);
+	});
 });
 
 describe('which lists look up setlists', () => {

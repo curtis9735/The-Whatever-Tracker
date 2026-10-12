@@ -61,6 +61,8 @@ interface RawSetlist {
 	};
 }
 
+const STATE_ABBREVIATIONS = new Set(['US', 'CA', 'AU']);
+
 export function normalizeSetlist(s: RawSetlist): SetlistEvent {
 	const [d, m, y] = s.eventDate.split('-');
 	const city = s.venue?.city;
@@ -72,12 +74,14 @@ export function normalizeSetlist(s: RawSetlist): SetlistEvent {
 			songs.push({ name: song.name, set: label || undefined, info: song.info, cover: song.cover?.name });
 		}
 	}
+	// "Indianapolis, IN" reads naturally; setlist.fm's codes elsewhere ("Munich, 02") don't
+	const state = STATE_ABBREVIATIONS.has(city?.country?.code ?? '') ? city?.stateCode : undefined;
 	return {
 		id: s.id,
 		date: `${y}-${m}-${d}`,
 		artist: s.artist.name,
 		venue: s.venue?.name ?? '',
-		city: [city?.name, city?.stateCode].filter(Boolean).join(', '),
+		city: [city?.name, state].filter(Boolean).join(', '),
 		country: city?.country?.name ?? '',
 		tour: s.tour?.name,
 		url: s.url,
@@ -122,8 +126,10 @@ export async function searchSetlists(
 	signal?: AbortSignal
 ): Promise<{ events: SetlistEvent[]; total: number }> {
 	const url = setlistSearchUrl(q);
-	// Setlists appear on setlist.fm in the days after a show, so "nothing yet" is only cached briefly
-	const ttl = (r: { total: number }) => (r.total > 0 ? DAY : 10 * 60_000);
+	// Setlists appear on setlist.fm in the days after a show, so "nothing yet" (or a show
+	// without its songs yet) is only cached briefly
+	const ttl = (r: { total: number; events: SetlistEvent[] }) =>
+		r.total > 0 && r.events.every((e) => e.songs.length) ? DAY : 10 * 60_000;
 	return cached(`setlistfm:${url.search}`, ttl, async () => {
 		let res: Response;
 		try {
@@ -136,4 +142,11 @@ export async function searchSetlists(
 		const json = (await res.json()) as { setlist?: RawSetlist[]; total?: number };
 		return { events: (json.setlist ?? []).map(normalizeSetlist), total: json.total ?? 0 };
 	});
+}
+
+/** The current version of one setlist (fans keep editing them after the show). Not cached. */
+export async function fetchSetlist(id: string, signal?: AbortSignal): Promise<SetlistEvent> {
+	if (!/^[0-9a-f]{4,12}$/i.test(id)) throw new ProviderError('Unknown setlist', 400);
+	const res = await setlistGet(`${API}/setlist/${id}`, signal);
+	return normalizeSetlist((await res.json()) as RawSetlist);
 }

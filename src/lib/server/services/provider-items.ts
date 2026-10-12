@@ -4,7 +4,8 @@ import { db, schema } from '../db';
 import { getProvider } from '../providers/registry';
 import { ProviderError } from '../providers/util';
 import { getCategoryById } from './categories';
-import { addImage, addLog, createItem, getOwnedItem, updateItem } from './items';
+import { addImage, createItem, getOwnedItem, updateItem } from './items';
+import { addLogWithShow, afterAddPath } from './concerts';
 import { reindexItem } from '../search/local';
 import type { NormalizedMetadata } from '$lib/types';
 
@@ -87,16 +88,22 @@ export async function addFromProvider(userId: number, input: AddFromProviderInpu
 
 	const art = d.largeImageUrl ?? d.imageUrl;
 	if (art) await addImage(userId, { itemId: item.id }, { type: 'url', url: art, linkOnly: true });
+	let first: Awaited<ReturnType<typeof addLogWithShow>> | null = null;
 	if (input.logDate) {
-		addLog(
-			userId,
-			item.id,
-			{ date: input.logDate, rating: input.rating, notes: input.logNotes ?? null },
-			category.statuses
-		);
+		// Concerts: the setlist.fm show from that day comes along with the first log
+		first = await addLogWithShow(userId, item.id, category, {
+			date: input.logDate,
+			rating: input.rating,
+			notes: input.logNotes ?? null
+		});
 	}
 	reindexItem(item.id);
-	return { id: item.id, created: true };
+	return {
+		id: item.id,
+		created: true,
+		show: first?.show ?? null,
+		next: afterAddPath(item.id, first?.log.id ?? null, first?.show ?? null)
+	};
 }
 
 export interface ProviderRef {

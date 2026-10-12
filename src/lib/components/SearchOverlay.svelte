@@ -185,8 +185,7 @@
 		addStatus = addCategory?.statuses[0]?.key ?? '';
 	}
 
-	// Logging a show into a list with setlist.fm turned on continues on the item's page,
-	// where setlist.fm fills in the details
+	// Lists with setlist.fm turned on get the show from that day attached to the first log
 	const showFlow = $derived(setlistReady && !!addCategory?.providerKinds.includes(SETLIST_SOURCE));
 	// A finished status (Completed, Seen…) records when as the first log; others add no log
 	const finishedAdd = $derived(!!addCategory && isFinished(addCategory.statuses, addStatus));
@@ -198,7 +197,6 @@
 		const fd = ratingForm ? new FormData(ratingForm) : null;
 		const rating = fd?.get('rating');
 		const when = finishedAdd && logDate ? logDate : null;
-		const logLater = !!when && showFlow;
 		try {
 			const res = await fetch('/api/items/from-provider', {
 				method: 'POST',
@@ -210,13 +208,13 @@
 					categoryId: addCategoryId,
 					status: addStatus || null,
 					rating: rating === '' || rating === null || rating === undefined ? null : Number(rating),
-					logDate: when && !logLater ? when : null
+					logDate: when
 				})
 			});
 			const d = await res.json();
 			if (!res.ok) throw new Error(d.message || 'Could not add it');
 			inLibrary = { ...inLibrary, [`${preview.provider}:${preview.kind}:${preview.id}`]: d.id };
-			await go(logLater ? `/items/${d.id}?log=${when}` : `/items/${d.id}`);
+			await go(d.next ?? `/items/${d.id}`);
 		} catch (e) {
 			addError = (e as Error).message;
 		} finally {
@@ -550,7 +548,7 @@
 							<input class="input" id="add-when" type="date" bind:value={logDate} />
 							<p class="hint">
 								{showFlow
-									? 'Next, pick the show on setlist.fm to fill in the venue and setlist.'
+									? "The show's venue and setlist are pulled from setlist.fm for that day."
 									: 'Saved as the first entry in its history. Clear the date to skip.'}
 							</p>
 						</div>

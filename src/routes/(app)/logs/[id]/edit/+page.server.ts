@@ -22,7 +22,7 @@ function logId(params: { id: string }) {
 	return id;
 }
 
-export const load: PageServerLoad = async ({ locals, params }) => {
+export const load: PageServerLoad = async ({ locals, params, url }) => {
 	const userId = locals.user!.id;
 	const log = getOwnedLog(userId, logId(params));
 	const item = getOwnedItem(userId, log.itemId);
@@ -39,7 +39,9 @@ export const load: PageServerLoad = async ({ locals, params }) => {
 		...cat,
 		images,
 		today: todayIso(),
-		canSetlist: canFindSetlists(item, cat.category)
+		canSetlist: canFindSetlists(item, cat.category),
+		// Just added, and setlist.fm has more than one show for the artist that day
+		pick: url.searchParams.has('pick')
 	};
 };
 

@@ -7,10 +7,15 @@ import {
 	deleteLog,
 	getItemDetail,
 	getOwnedItem,
+	getOwnedLog,
 	imageSourcesFromForm,
 	setCover,
-	updateItem
+	updateItem,
+	updateLog
 } from '$lib/server/services/items';
+import { fetchSetlist } from '$lib/server/providers/setlistfm';
+import { ProviderError } from '$lib/server/providers/util';
+import type { SetlistEvent } from '$lib/types';
 import { getCategoryById } from '$lib/server/services/categories';
 import {
 	linkToProvider,
@@ -33,13 +38,10 @@ function itemId(params: { id: string }) {
 
 export const load: PageServerLoad = async ({ locals, params, url }) => {
 	const detail = getItemDetail(locals.user!.id, itemId(params));
-	// ?log=YYYY-MM-DD opens the "Add log" form for that day (used right after adding an artist from search)
-	const logParam = url.searchParams.get('log');
 	return {
 		...detail,
 		today: todayIso(),
 		canSetlist: canFindSetlists(detail.item, detail.category),
-		openLogDate: logParam && /^\d{4}-\d{2}-\d{2}$/.test(logParam) ? logParam : null,
 		warn: url.searchParams.get('warn')
 	};
 };
@@ -97,6 +99,23 @@ export const actions: Actions = {
 		const log = addLog(userId, item.id, parsed.data, category.statuses);
 		const warnings = await saveImages(userId, { logId: log.id }, form, 'logimg_');
 		return { logAdded: true, warning: warnings[0] ?? null };
+	},
+
+	/** Re-fetches a log's setlist from setlist.fm (songs are often added in the days after a show). */
+	refreshSetlist: async ({ request, locals, params }) => {
+		const userId = locals.user!.id;
+		const item = getOwnedItem(userId, itemId(params));
+		const log = getOwnedLog(userId, Number((await request.formData()).get('logId')));
+		const current = (log.external as { setlist?: SetlistEvent } | null)?.setlist;
+		if (log.itemId !== item.id || !current) return fail(400, { warning: 'This log has no setlist.' });
+		try {
+			const fresh = await fetchSetlist(current.id);
+			updateLog(userId, log.id, { ...log, external: { ...log.external, setlist: fresh } });
+		} catch (e) {
+			return fail(502, {
+				warning: e instanceof ProviderError ? e.message : 'setlist.fm could not be reached'
+			});
+		}
 	},
 
 	deleteLog: async ({ request, locals }) => {

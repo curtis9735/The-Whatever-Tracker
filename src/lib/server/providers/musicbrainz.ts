@@ -1,6 +1,7 @@
 import { keys, userAgent } from '../settings';
 import type { NormalizedMetadata, SearchResult } from '$lib/types';
 import type { Provider } from './types';
+import { artistImage } from './artist-images';
 import { cached, createLimiter, fetchOk, joinNonEmpty, ProviderError, withTimeout, yearOf } from './util';
 
 // MusicBrainz: no key, but a contact User-Agent is required and the limit is 1 request/second.
@@ -101,7 +102,7 @@ function topGenres(g?: { name: string; count: number }[], t?: { name: string; co
 		.map((x) => x.name);
 }
 
-export function normalizeMbArtistDetails(a: MbArtist): NormalizedMetadata {
+export function normalizeMbArtistDetails(a: MbArtist, image?: string | null): NormalizedMetadata {
 	const base = normalizeMbArtist(a);
 	const span = a['life-span'];
 	const active = span?.begin
@@ -110,6 +111,7 @@ export function normalizeMbArtistDetails(a: MbArtist): NormalizedMetadata {
 	const homepage = a.relations?.find((r) => r.type === 'official homepage')?.url?.resource;
 	return {
 		...base,
+		imageUrl: image ?? undefined,
 		subtitle: joinNonEmpty([a.type, a.area?.name ?? a.country]),
 		description: a.disambiguation || undefined,
 		genres: topGenres(a.genres, a.tags),
@@ -184,7 +186,7 @@ export const musicbrainz: Provider = {
 			const a = await cached(`mb:artist:${id}`, 7 * DAY, () =>
 				mbGet<MbArtist>(`/artist/${id}`, { inc: 'genres+tags+url-rels' }, signal)
 			);
-			return normalizeMbArtistDetails(a);
+			return normalizeMbArtistDetails(a, await artistImage(a, signal));
 		}
 		if (kind === 'album') {
 			const rg = await cached(`mb:rg:${id}`, 7 * DAY, () =>

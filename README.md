@@ -132,14 +132,15 @@ NAS (so they're in its backups too). After saving, the app only ever shows the l
 **Or in the Portainer stack:** set the variables below and update the stack. Household members who aren't admins
 can see which sources are connected, but can't view or change keys.
 
-| Source          | Gives you                     | How to get access                                                                                                                      | Variables                                       |
-| --------------- | ----------------------------- | -------------------------------------------------------------------------------------------------------------------------------------- | ----------------------------------------------- |
-| TMDB            | Movies, TV shows              | Free account → [API settings](https://www.themoviedb.org/settings/api)                                                                 | `TMDB_API_KEY` (v3 key or v4 read token)        |
-| IGDB            | Video games                   | [Twitch developer console](https://dev.twitch.tv/console/apps) → register an app                                                       | `IGDB_CLIENT_ID`, `IGDB_CLIENT_SECRET`          |
-| BoardGameGeek   | Board games                   | [Register an application](https://boardgamegeek.com/applications), then create a token. Approval is manual and can take a week or more | `BGG_API_TOKEN`                                 |
-| MusicBrainz     | Artists, albums (+ cover art) | No key needed, just contact info                                                                                                       | `MUSICBRAINZ_CONTACT` (an email address or URL) |
-| setlist.fm      | Concert setlists              | Free [API key](https://www.setlist.fm/settings/api)                                                                                    | `SETLISTFM_API_KEY`                             |
-| Open Food Facts | Barcode lookups               | Always on, no key                                                                                                                      | none                                            |
+| Source            | Gives you                     | How to get access                                                                                                                      | Variables                                       |
+| ----------------- | ----------------------------- | -------------------------------------------------------------------------------------------------------------------------------------- | ----------------------------------------------- |
+| TMDB              | Movies, TV shows              | Free account → [API settings](https://www.themoviedb.org/settings/api)                                                                 | `TMDB_API_KEY` (v3 key or v4 read token)        |
+| IGDB              | Video games                   | [Twitch developer console](https://dev.twitch.tv/console/apps) → register an app                                                       | `IGDB_CLIENT_ID`, `IGDB_CLIENT_SECRET`          |
+| BoardGameGeek     | Board games                   | [Register an application](https://boardgamegeek.com/applications), then create a token. Approval is manual and can take a week or more | `BGG_API_TOKEN`                                 |
+| MusicBrainz       | Artists, albums (+ cover art) | No key needed, just contact info                                                                                                       | `MUSICBRAINZ_CONTACT` (an email address or URL) |
+| setlist.fm        | Concert setlists              | Free [API key](https://www.setlist.fm/settings/api)                                                                                    | `SETLISTFM_API_KEY`                             |
+| Open Food Facts   | Barcode lookups               | Always on, no key                                                                                                                      | none                                            |
+| Wikimedia, Deezer | Artist photos                 | Always on, no key. Used when adding a MusicBrainz artist                                                                               | none                                            |
 
 Search only asks sources that match one of your lists. For example, TV results appear only if a list has
 "TV show (TMDB)" ticked under **List settings → Metadata sources**.
@@ -165,13 +166,20 @@ Search only asks sources that match one of your lists. For example, TV results a
   (**Me → Integrations**), any list with **Concert setlists (setlist.fm)** ticked under **List settings →
   Metadata sources → When logging** gets the lookup. The Concerts template has it ticked. To search for artists
   in the search bar, also connect MusicBrainz, which only needs an email address or URL as contact info.
-  - **When adding the artist** (from search or the Add form): choose **Seen** and the date. You land on the
-    artist's page with the show already looked up; if there was one show that day, it's picked automatically.
-  - **On the artist's page:** **Add log** offers the same lookup, searchable by date or year, city and venue.
-  - **For an existing log:** use its edit page to attach or change the show.
+  - **When adding the artist** (from search or the Add form): choose **Seen** and the date of the show. The show
+    is saved right away, and if setlist.fm has it, the venue and full setlist come with it. On the rare day with
+    more than one show, you're asked to pick yours.
+  - **If setlist.fm doesn't have it yet:** the show is still saved with its date, and gets a **Find the setlist**
+    button. Setlists usually appear within a few days of a show. **Check for updates** under a setlist re-fetches
+    it once fans have filled in more songs.
+  - **On the artist's page:** **Add log** for another show offers the same lookup, searchable by date or year,
+    city and venue. To attach or change the show on an existing log, use its edit page.
 
-  Picking a show fills in the date, the venue and the full setlist. Artists added by hand (not from MusicBrainz)
-  are looked up by name. Setlists usually appear on setlist.fm within a few days of a show.
+  The newest show's setlist is shown open on the artist's page, split into its sets and encores. Artists added by
+  hand (not from MusicBrainz) are looked up by name.
+
+  Artists from MusicBrainz get a photo from Wikimedia Commons (via Wikidata), or from Deezer when Commons has
+  none. For artists added before v0.2.6, open **About → Refresh details** on their page to fetch it.
 
 - **Lists:** **Manage lists** lets you rename lists, reorder them, pick an emoji and color, choose a rating scale
   (5 stars with halves, 10 points or 100 points; existing ratings convert automatically), edit the statuses and
