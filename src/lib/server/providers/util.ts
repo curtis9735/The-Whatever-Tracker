@@ -42,8 +42,15 @@ export function createLimiter(minIntervalMs: number) {
 
 const inflight = new Map<string, Promise<unknown>>();
 
-/** SQLite-backed response cache; concurrent identical requests share one upstream call. */
-export async function cached<T>(key: string, ttlMs: number, fn: () => Promise<T>): Promise<T> {
+/**
+ * SQLite-backed response cache; concurrent identical requests share one upstream call.
+ * `ttl` can depend on the answer (e.g. cache empty results briefly).
+ */
+export async function cached<T>(
+	key: string,
+	ttl: number | ((value: T) => number),
+	fn: () => Promise<T>
+): Promise<T> {
 	const sqlite = rawDb();
 	const row = sqlite.prepare('SELECT value, expires_at FROM provider_cache WHERE key = ?').get(key) as
 		{ value: string; expires_at: number } | undefined;
@@ -56,7 +63,7 @@ export async function cached<T>(key: string, ttlMs: number, fn: () => Promise<T>
 			const value = await fn();
 			sqlite
 				.prepare('INSERT OR REPLACE INTO provider_cache (key, value, expires_at) VALUES (?, ?, ?)')
-				.run(key, JSON.stringify(value), Date.now() + ttlMs);
+				.run(key, JSON.stringify(value), Date.now() + (typeof ttl === 'function' ? ttl(value) : ttl));
 			return value;
 		} finally {
 			inflight.delete(key);

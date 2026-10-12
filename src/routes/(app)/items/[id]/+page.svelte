@@ -1,5 +1,8 @@
 <script lang="ts">
+	import { tick } from 'svelte';
 	import { enhance } from '$app/forms';
+	import { goto } from '$app/navigation';
+	import { page } from '$app/state';
 	import { formatFieldValue } from '$lib/fields';
 	import { imageSrc } from '$lib/images';
 	import { categoryColor, PROVIDER_LABELS } from '$lib/kinds';
@@ -54,6 +57,20 @@
 			logLocation = [e.venue, e.city].filter(Boolean).join(', ');
 		}
 	}
+
+	// Arriving with ?log=YYYY-MM-DD (e.g. right after adding an artist from search): open the
+	// log form on that day and, for concerts, look the show up on setlist.fm straight away
+	let pickerDate = $state<string | null>(null);
+	$effect(() => {
+		const d = data.openLogDate;
+		if (!d) return;
+		logOpen = true;
+		logDate = d;
+		pickerDate = d;
+		tick().then(() =>
+			document.getElementById('add-log')?.scrollIntoView({ behavior: 'smooth', block: 'start' })
+		);
+	});
 
 	function pretty(d: string) {
 		return new Date(`${d}T00:00:00`).toLocaleDateString(undefined, { dateStyle: 'medium' });
@@ -329,10 +346,11 @@
 			{#if logOpen}
 				{#key logFormKey}
 					<form
+						id="add-log"
 						method="POST"
 						action="?/addLog"
 						enctype="multipart/form-data"
-						class="card mb-5 space-y-4 p-4"
+						class="card mb-5 scroll-mt-20 space-y-4 p-4"
 						use:enhance={() => {
 							busy = true;
 							return async ({ result, update }) => {
@@ -343,14 +361,24 @@
 									setlist = null;
 									logDate = undefined;
 									logLocation = undefined;
+									pickerDate = null;
 									logFormKey++;
+									// Drop ?log=… so a reload doesn't open the form again
+									if (page.url.searchParams.has('log')) {
+										goto(page.url.pathname, { replaceState: true, noScroll: true, keepFocus: true });
+									}
 								}
 							};
 						}}
 					>
 						{#if form?.logError}<p class="error-box">{form.logError}</p>{/if}
 						{#if data.canSetlist}
-							<SetlistPicker itemId={item.id} bind:selected={setlist} onpick={onSetlist} />
+							<SetlistPicker
+								itemId={item.id}
+								initialDate={pickerDate}
+								bind:selected={setlist}
+								onpick={onSetlist}
+							/>
 							<input type="hidden" name="log_external" value={setlist ? JSON.stringify({ setlist }) : ''} />
 						{/if}
 						<LogFields

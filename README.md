@@ -154,8 +154,15 @@ Search only asks sources that match one of your lists. For example, TV results a
 - **Logs:** each log has a date, a rating for that time, a place, a price, notes, photos and the list's log
   fields. Logging something that was in a "planned" status (wishlist, to watch) moves it to the first "done"
   status automatically.
-- **Concerts:** the item is the artist (from MusicBrainz). Each show you attend is a log. When adding a log, search
-  setlist.fm by date, year or city to fill in the venue and the setlist.
+- **Concerts:** the item is the artist, and each show you attend is a log. With setlist.fm connected:
+  - **From search:** tick **I went to a show** and pick the date. You land on the artist's page with the show
+    already looked up; if there was one show that day, it's picked automatically.
+  - **On the artist's page:** **Add log** offers the same lookup, searchable by date or year, city and venue.
+  - **For an existing log:** use its edit page to attach or change the show.
+
+  Picking a show fills in the date, the venue and the full setlist. Artists added by hand (not from MusicBrainz)
+  are looked up by name. Setlists usually appear on setlist.fm within a few days of a show.
+
 - **Lists:** **Manage lists** lets you rename lists, reorder them, pick an emoji and color, choose a rating scale
   (5 stars with halves, 10 points or 100 points; existing ratings convert automatically), edit the statuses and
   their groups, and add or remove fields.

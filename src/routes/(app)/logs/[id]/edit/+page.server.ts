@@ -13,6 +13,7 @@ import {
 } from '$lib/server/services/items';
 import { parseLogForm, todayIso } from '$lib/server/forms';
 import { ImageError } from '$lib/server/images/store';
+import { canFindSetlists } from '$lib/server/services/concerts';
 import type { Actions, PageServerLoad } from './$types';
 
 function logId(params: { id: string }) {
@@ -32,7 +33,14 @@ export const load: PageServerLoad = async ({ locals, params }) => {
 		.where(eq(schema.images.logId, log.id))
 		.orderBy(asc(schema.images.id))
 		.all();
-	return { log, item, ...cat, images, today: todayIso() };
+	return {
+		log,
+		item,
+		...cat,
+		images,
+		today: todayIso(),
+		canSetlist: canFindSetlists(item, cat.category)
+	};
 };
 
 export const actions: Actions = {

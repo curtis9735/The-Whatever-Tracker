@@ -21,8 +21,9 @@
 	let {
 		open = $bindable(false),
 		categories,
-		searchKinds
-	}: { open?: boolean; categories: Cat[]; searchKinds: string[] } = $props();
+		searchKinds,
+		setlistReady = false
+	}: { open?: boolean; categories: Cat[]; searchKinds: string[]; setlistReady?: boolean } = $props();
 
 	let dialog: HTMLDialogElement;
 	let input = $state<HTMLInputElement>();
@@ -185,12 +186,16 @@
 		addStatus = addCategory?.statuses[0]?.key ?? '';
 	}
 
+	// Logging a show for an artist continues on the artist's page, where setlist.fm fills in the details
+	const showFlow = $derived(preview?.kindKey === 'musicbrainz:artist' && setlistReady);
+
 	async function add() {
 		if (!preview || !addCategoryId) return;
 		adding = true;
 		addError = '';
 		const fd = ratingForm ? new FormData(ratingForm) : null;
 		const rating = fd?.get('rating');
+		const logLater = logIt && showFlow;
 		try {
 			const res = await fetch('/api/items/from-provider', {
 				method: 'POST',
@@ -202,13 +207,13 @@
 					categoryId: addCategoryId,
 					status: addStatus || null,
 					rating: rating === '' || rating === null || rating === undefined ? null : Number(rating),
-					logDate: logIt ? logDate : null
+					logDate: logIt && !logLater ? logDate : null
 				})
 			});
 			const d = await res.json();
 			if (!res.ok) throw new Error(d.message || 'Could not add it');
 			inLibrary = { ...inLibrary, [`${preview.provider}:${preview.kind}:${preview.id}`]: d.id };
-			await go(`/items/${d.id}`);
+			await go(logLater ? `/items/${d.id}?log=${logDate}` : `/items/${d.id}`);
 		} catch (e) {
 			addError = (e as Error).message;
 		} finally {
@@ -542,10 +547,18 @@
 					</form>
 					<label class="flex items-center gap-2 text-sm">
 						<input type="checkbox" bind:checked={logIt} class="h-4 w-4 accent-[var(--accent)]" />
-						Log it (watched / played / tried)
+						{showFlow ? 'I went to a show' : 'Log it (watched / played / tried)'}
 					</label>
 					{#if logIt}
-						<input class="input" type="date" bind:value={logDate} aria-label="Log date" />
+						<input
+							class="input"
+							type="date"
+							bind:value={logDate}
+							aria-label={showFlow ? 'Show date' : 'Log date'}
+						/>
+						{#if showFlow}
+							<p class="hint mt-0">Next, pick the show from setlist.fm to fill in the venue and setlist.</p>
+						{/if}
 					{/if}
 				{/if}
 				{#if addError}<p class="error-box">{addError}</p>{/if}

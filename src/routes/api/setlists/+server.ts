@@ -2,23 +2,27 @@ import { error, json } from '@sveltejs/kit';
 import { searchSetlists, setlistfmEnabled } from '$lib/server/providers/setlistfm';
 import { ProviderError } from '$lib/server/providers/util';
 import { getOwnedItem } from '$lib/server/services/items';
+import { getCategoryById } from '$lib/server/services/categories';
+import { isConcertItem, setlistArtist } from '$lib/server/services/concerts';
 import type { RequestHandler } from './$types';
 
-/** Setlists for the artist behind a Concerts item, filtered by date, year or city. */
+/** setlist.fm shows for the performer behind an item, filtered by date/year, city and venue. */
 export const GET: RequestHandler = async ({ locals, url, request }) => {
-	if (!setlistfmEnabled()) error(503, 'setlist.fm is not configured (SETLISTFM_API_KEY)');
-	const item = getOwnedItem(locals.user!.id, Number(url.searchParams.get('item')));
-	if (item.provider !== 'musicbrainz' || item.providerKind !== 'artist' || !item.providerId) {
-		error(400, 'Setlists need an artist from MusicBrainz');
-	}
+	if (!setlistfmEnabled()) error(503, 'setlist.fm is not connected (Me → Integrations)');
+	const userId = locals.user!.id;
+	const item = getOwnedItem(userId, Number(url.searchParams.get('item')));
+	const { category } = getCategoryById(userId, item.categoryId);
+	if (!isConcertItem(item, category)) error(400, 'Setlists are only available for artists');
+	const sp = url.searchParams;
 	try {
 		const data = await searchSetlists(
-			item.providerId,
 			{
-				date: url.searchParams.get('date') ?? undefined,
-				year: url.searchParams.get('year') ?? undefined,
-				city: url.searchParams.get('city') ?? undefined,
-				page: Number(url.searchParams.get('page') ?? 1) || 1
+				artist: setlistArtist(item),
+				date: sp.get('date') ?? undefined,
+				year: sp.get('year') ?? undefined,
+				city: sp.get('city') ?? undefined,
+				venue: sp.get('venue') ?? undefined,
+				page: Number(sp.get('page') ?? 1) || 1
 			},
 			request.signal
 		);

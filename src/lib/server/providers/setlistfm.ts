@@ -71,24 +71,46 @@ export function normalizeSetlist(s: RawSetlist): SetlistEvent {
 	};
 }
 
+export interface SetlistQuery {
+	/** Artist from MusicBrainz (exact), or a name for artists added by hand (setlist.fm matches it loosely) */
+	artist: { mbid: string } | { name: string };
+	date?: string; // YYYY-MM-DD
+	year?: string;
+	city?: string;
+	venue?: string;
+	page?: number;
+}
+
+export function setlistSearchUrl(q: SetlistQuery) {
+	const url = new URL(`${API}/search/setlists`);
+	if ('mbid' in q.artist) {
+		if (!/^[0-9a-f-]{36}$/.test(q.artist.mbid)) throw new ProviderError('Unknown artist', 400);
+		url.searchParams.set('artistMbid', q.artist.mbid);
+	} else {
+		const name = q.artist.name.trim();
+		if (!name) throw new ProviderError('Unknown artist', 400);
+		url.searchParams.set('artistName', name.slice(0, 200));
+	}
+	if (q.date && /^\d{4}-\d{2}-\d{2}$/.test(q.date)) {
+		const [y, m, d] = q.date.split('-');
+		url.searchParams.set('date', `${d}-${m}-${y}`);
+	} else if (q.year && /^\d{4}$/.test(q.year)) {
+		url.searchParams.set('year', q.year);
+	}
+	if (q.city?.trim()) url.searchParams.set('cityName', q.city.trim().slice(0, 100));
+	if (q.venue?.trim()) url.searchParams.set('venueName', q.venue.trim().slice(0, 100));
+	url.searchParams.set('p', String(q.page ?? 1));
+	return url;
+}
+
 export async function searchSetlists(
-	artistMbid: string,
-	opts: { date?: string; year?: string; city?: string; page?: number },
+	q: SetlistQuery,
 	signal?: AbortSignal
 ): Promise<{ events: SetlistEvent[]; total: number }> {
-	if (!/^[0-9a-f-]{36}$/.test(artistMbid)) throw new ProviderError('Unknown artist', 400);
-	const url = new URL(`${API}/search/setlists`);
-	url.searchParams.set('artistMbid', artistMbid);
-	if (opts.date && /^\d{4}-\d{2}-\d{2}$/.test(opts.date)) {
-		const [y, m, d] = opts.date.split('-');
-		url.searchParams.set('date', `${d}-${m}-${y}`);
-	} else if (opts.year && /^\d{4}$/.test(opts.year)) {
-		url.searchParams.set('year', opts.year);
-	}
-	if (opts.city?.trim()) url.searchParams.set('cityName', opts.city.trim());
-	url.searchParams.set('p', String(opts.page ?? 1));
-
-	return cached(`setlistfm:${url.search}`, DAY, () =>
+	const url = setlistSearchUrl(q);
+	// Setlists appear on setlist.fm in the days after a show, so "nothing yet" is only cached briefly
+	const ttl = (r: { total: number }) => (r.total > 0 ? DAY : 10 * 60_000);
+	return cached(`setlistfm:${url.search}`, ttl, () =>
 		limiter(async () => {
 			let res: Response;
 			try {

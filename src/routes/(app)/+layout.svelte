@@ -120,4 +120,9 @@
 	</nav>
 </div>
 
-<SearchOverlay bind:open={searchUi.open} categories={data.categories} searchKinds={data.searchKinds} />
+<SearchOverlay
+	bind:open={searchUi.open}
+	categories={data.categories}
+	searchKinds={data.searchKinds}
+	setlistReady={data.setlistReady}
+/>

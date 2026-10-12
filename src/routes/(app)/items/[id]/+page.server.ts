@@ -15,7 +15,7 @@ import { getCategoryById } from '$lib/server/services/categories';
 import { refreshMetadata } from '$lib/server/services/provider-items';
 import { parseLogForm, todayIso } from '$lib/server/forms';
 import { ImageError } from '$lib/server/images/store';
-import { setlistfmEnabled } from '$lib/server/providers/setlistfm';
+import { canFindSetlists } from '$lib/server/services/concerts';
 import { parseRatingInput } from '$lib/ratings';
 import type { Actions, PageServerLoad } from './$types';
 
@@ -27,11 +27,13 @@ function itemId(params: { id: string }) {
 
 export const load: PageServerLoad = async ({ locals, params, url }) => {
 	const detail = getItemDetail(locals.user!.id, itemId(params));
-	const isArtist = detail.item.provider === 'musicbrainz' && detail.item.providerKind === 'artist';
+	// ?log=YYYY-MM-DD opens the "Add log" form for that day (used right after adding an artist from search)
+	const logParam = url.searchParams.get('log');
 	return {
 		...detail,
 		today: todayIso(),
-		canSetlist: isArtist && setlistfmEnabled(),
+		canSetlist: canFindSetlists(detail.item, detail.category),
+		openLogDate: logParam && /^\d{4}-\d{2}-\d{2}$/.test(logParam) ? logParam : null,
 		warn: url.searchParams.get('warn')
 	};
 };

@@ -5,11 +5,26 @@
 	import Icon from '$lib/components/Icon.svelte';
 	import ImagePicker from '$lib/components/ImagePicker.svelte';
 	import LogFields from '$lib/components/LogFields.svelte';
+	import SetlistPicker from '$lib/components/SetlistPicker.svelte';
 
 	let { data, form } = $props();
-	const setlist = $derived((data.log.external as { setlist?: SetlistEvent } | null)?.setlist ?? null);
+	const existing = $derived((data.log.external as { setlist?: SetlistEvent } | null)?.setlist ?? null);
+
+	// svelte-ignore state_referenced_locally
+	let chosen = $state<SetlistEvent | null>(existing);
+	// svelte-ignore state_referenced_locally
+	let logDate = $state<string>(data.log.date);
+	// svelte-ignore state_referenced_locally
+	let logLocation = $state<string>(data.log.location ?? '');
 	let keepSetlist = $state(true);
 	let busy = $state(false);
+
+	function onSetlist(e: SetlistEvent | null) {
+		if (e) {
+			logDate = e.date;
+			logLocation = [e.venue, e.city].filter(Boolean).join(', ');
+		}
+	}
 </script>
 
 <svelte:head><title>Edit log · {data.item.title}</title></svelte:head>
@@ -38,16 +53,21 @@
 		}}
 	>
 		{#if form?.message}<p class="error-box">{form.message}</p>{/if}
-		<LogFields
-			scale={data.category.ratingScale}
-			logFields={data.logFields}
-			values={data.log}
-			dateDefault={data.today}
-		/>
 
-		{#if setlist}
+		{#if data.canSetlist}
+			<!-- Attach, change or remove the setlist.fm show for this log -->
+			<SetlistPicker
+				itemId={data.item.id}
+				initialDate={existing ? null : data.log.date}
+				bind:selected={chosen}
+				onpick={onSetlist}
+			/>
+			<input type="hidden" name="log_external" value={chosen ? JSON.stringify({ setlist: chosen }) : ''} />
+		{:else if existing}
 			<div class="card p-4 text-sm">
-				<p class="font-medium">Setlist: {setlist.venue}, {setlist.city} ({setlist.songs.length} songs)</p>
+				<p class="font-medium">
+					Setlist: {existing.venue}, {existing.city} ({existing.songs.length} songs)
+				</p>
 				<label class="mt-2 flex items-center gap-2">
 					<input type="checkbox" bind:checked={keepSetlist} class="h-4 w-4 accent-[var(--accent)]" /> Keep setlist
 				</label>
@@ -58,6 +78,16 @@
 				/>
 			</div>
 		{/if}
+
+		<LogFields
+			scale={data.category.ratingScale}
+			logFields={data.logFields}
+			values={data.log}
+			dateDefault={data.today}
+			bind:date={logDate}
+			bind:location={logLocation}
+			locationLabel={data.canSetlist ? 'Venue' : 'Where'}
+		/>
 
 		<ImagePicker prefix="logimg_" label="Add photos" />
 
