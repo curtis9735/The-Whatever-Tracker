@@ -25,24 +25,18 @@ reverse proxy, and to work well on a phone.
 The flow: GitHub builds the Docker image → Portainer pulls it onto the NAS → DSM's reverse proxy serves it over
 HTTPS. It takes about 20 minutes the first time.
 
-### 1. Put the code on GitHub
+### 1. The code on GitHub
 
-1. Create a **new repository** on GitHub named **`whatever-tracker`**. Private is fine.
-2. From this folder:
-   ```bash
-   git remote add origin https://github.com/<your-username>/whatever-tracker.git
-   ```
-   ```bash
-   git push -u origin main
-   ```
-3. Open the repo's **Actions** tab. The _Test and publish image_ workflow runs the tests, then builds the image
-   for both Intel/AMD and ARM Synology models. The first run takes around 10 minutes.
+The code lives at [github.com/curtis9735/The-Whatever-Tracker](https://github.com/curtis9735/The-Whatever-Tracker).
+Every push to `main` triggers the _Test and publish image_ workflow (repo → **Actions** tab). It runs the
+tests, then builds the image for both Intel/AMD and ARM Synology models. The first run takes around 10 minutes.
 
 ### 2. Let the NAS pull the image
 
-GitHub stores the image at `ghcr.io/<your-username>/whatever-tracker`. Pick one:
+GitHub stores the image at `ghcr.io/curtis9735/the-whatever-tracker`. Container image names are always
+lowercase. Because the repo is private, the image starts out private too. Pick one:
 
-- **Simplest:** on GitHub open your profile → **Packages** → `whatever-tracker` → **Package settings** →
+- **Simplest:** on GitHub open your profile → **Packages** → `the-whatever-tracker` → **Package settings** →
   **Change visibility → Public**. The image contains only the app, never your data or keys.
 - **Keep it private:** create a classic personal access token with only the `read:packages` scope
   (GitHub → Settings → Developer settings → Personal access tokens). In Portainer go to **Registries → Add
@@ -66,7 +60,7 @@ You'll see something like `uid=1026(you) gid=100(users)`. Those are `PUID=1026` 
 1. **Stacks → Add stack**, name it `whatever-tracker`, and choose **Web editor**.
 2. Paste in the contents of [`docker-compose.yml`](docker-compose.yml).
 3. Under **Environment variables**, switch to **Advanced mode** and paste the variables from
-   [`.env.example`](.env.example), filled in. At minimum you need `GITHUB_OWNER`, `ORIGIN`, `PUID` and `PGID`.
+   [`.env.example`](.env.example), filled in. At minimum you need `ORIGIN`, `PUID` and `PGID`.
    Add API keys for the sources you want (see below).
 4. Click **Deploy the stack**.
 5. Open the container's **Logs**. You'll see a box with a **setup code**. You'll need it in a minute.

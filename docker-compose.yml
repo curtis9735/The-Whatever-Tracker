@@ -4,7 +4,8 @@
 
 services:
   tracker:
-    image: ghcr.io/${GITHUB_OWNER:?set GITHUB_OWNER}/whatever-tracker:${TAG:-latest}
+    # Built by GitHub Actions from github.com/curtis9735/The-Whatever-Tracker (GHCR names are lowercase)
+    image: ghcr.io/curtis9735/the-whatever-tracker:${TAG:-latest}
     container_name: whatever-tracker
     # Run as your DSM user so files in the data folder are yours (find it with `id` over SSH)
     user: '${PUID:-1026}:${PGID:-100}'
