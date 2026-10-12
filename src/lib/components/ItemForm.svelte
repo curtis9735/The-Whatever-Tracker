@@ -10,7 +10,9 @@
 		itemFields,
 		values,
 		allTags,
-		extra
+		extra,
+		afterTitle,
+		title = $bindable()
 	}: {
 		category: { ratingScale: RatingScale; statuses: StatusDef[] };
 		itemFields: FieldDef[];
@@ -28,7 +30,14 @@
 		};
 		allTags: string[];
 		extra?: Snippet;
+		/** Rendered right under the Name field (e.g. the metadata lookup) */
+		afterTitle?: Snippet;
+		/** The name as typed, for parents that react to it */
+		title?: string;
 	} = $props();
+
+	// svelte-ignore state_referenced_locally
+	if (title === undefined) title = values.title ?? '';
 
 	// svelte-ignore state_referenced_locally
 	let showMore = $state(!!(values.description || values.barcode));
@@ -45,9 +54,11 @@
 			name="title"
 			required
 			maxlength="300"
-			value={values.title ?? ''}
+			autocomplete="off"
+			bind:value={title}
 		/>
 	</div>
+	{@render afterTitle?.()}
 	<div>
 		<label class="label" for="subtitle">Subtitle <span class="font-normal text-muted">(optional)</span></label
 		>

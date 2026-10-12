@@ -12,7 +12,13 @@ import {
 	updateItem
 } from '$lib/server/services/items';
 import { getCategoryById } from '$lib/server/services/categories';
-import { refreshMetadata } from '$lib/server/services/provider-items';
+import {
+	linkToProvider,
+	lookupFailure,
+	MatchError,
+	parseMatch,
+	refreshMetadata
+} from '$lib/server/services/provider-items';
 import { parseLogForm, todayIso } from '$lib/server/forms';
 import { ImageError } from '$lib/server/images/store';
 import { canFindSetlists } from '$lib/server/services/concerts';
@@ -124,6 +130,19 @@ export const actions: Actions = {
 		} catch (e) {
 			const message = (e as { body?: { message?: string } }).body?.message ?? 'Could not refresh metadata';
 			return fail(502, { message });
+		}
+	},
+
+	/** Links an item added by hand to a TMDB/IGDB/… entry, pulling the poster and details. */
+	link: async ({ request, locals, params }) => {
+		const match = parseMatch(await request.formData());
+		if (!match) return fail(400, { linkError: 'Pick one of the matches first.' });
+		try {
+			await linkToProvider(locals.user!.id, itemId(params), match);
+			return { linked: true };
+		} catch (e) {
+			if (e instanceof MatchError) return fail(400, { linkError: e.message, existingId: e.existingId });
+			return fail(502, { linkError: lookupFailure(e) });
 		}
 	},
 

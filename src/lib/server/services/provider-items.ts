@@ -99,6 +99,60 @@ export async function addFromProvider(userId: number, input: AddFromProviderInpu
 	return { id: item.id, created: true };
 }
 
+export interface ProviderRef {
+	provider: string;
+	kind: string;
+	id: string;
+}
+
+/** Reads a match chosen in a form (hidden match_provider / match_kind / match_id inputs). */
+export function parseMatch(form: FormData): ProviderRef | null {
+	const provider = String(form.get('match_provider') ?? '');
+	const kind = String(form.get('match_kind') ?? '');
+	const id = String(form.get('match_id') ?? '');
+	if (!provider || !kind || !id) return null;
+	const p = getProvider(provider);
+	if (!p || !p.kinds.includes(`${provider}:${kind}`) || !/^[\w-]{1,100}$/.test(id)) return null;
+	return { provider, kind, id };
+}
+
+export class MatchError extends Error {
+	constructor(
+		message: string,
+		public existingId: number | null = null
+	) {
+		super(message);
+	}
+}
+
+/** Message from a failed provider lookup (fetchDetails throws SvelteKit HTTP errors). */
+export function lookupFailure(e: unknown) {
+	return (e as { body?: { message?: string } }).body?.message ?? (e as Error).message ?? 'Lookup failed';
+}
+
+/**
+ * Connects an item to a metadata source entry: stores details, keeps the user's own title,
+ * fills an empty subtitle/description, and adds the poster (cover if the item has none yet).
+ */
+export async function linkToProvider(userId: number, itemId: number, ref: ProviderRef) {
+	const item = getOwnedItem(userId, itemId);
+	const existing = findExisting(userId, ref.provider, ref.kind, ref.id);
+	if (existing && existing !== itemId) throw new MatchError('That one is already in your library.', existing);
+	const d = await fetchDetails(ref.provider, ref.kind, ref.id);
+	updateItem(userId, itemId, {
+		provider: ref.provider,
+		providerKind: ref.kind,
+		providerId: ref.id,
+		subtitle: item.subtitle || d.subtitle || null,
+		description: item.description || d.description || null,
+		externalUrl: d.url ?? item.externalUrl,
+		metadata: metadataToStore(d)
+	});
+	const art = d.largeImageUrl ?? d.imageUrl;
+	if (art) await addImage(userId, { itemId }, { type: 'url', url: art, linkOnly: true });
+	return d;
+}
+
 /** Re-pulls provider data. Keeps the user's own title; refreshes description, subtitle and facts. */
 export async function refreshMetadata(userId: number, itemId: number) {
 	const item = getOwnedItem(userId, itemId);

@@ -151,6 +151,10 @@ Search only asks sources that match one of your lists. For example, TV results a
 - **Search:** tap Search, press `/`, or press `Ctrl+K`. Library hits come first, then each source as its results
   arrive. Tap a result to preview it, choose the list, status and rating, and optionally log it right away. The
   last row always offers "Create '<what you typed>' in…" for things no source knows about.
+- **Adding from a list:** in a list with a metadata source (TMDB for Movies and TV, IGDB, BoardGameGeek,
+  MusicBrainz), the **Add** form looks the name up as you type. Pick a match and it saves the poster and details
+  along with your rating, log and photos. Anything added without a match can get one later with **Find details on
+  …** on its page.
 - **Logs:** each log has a date, a rating for that time, a place, a price, notes, photos and the list's log
   fields. Logging something that was in a "planned" status (wishlist, to watch) moves it to the first "done"
   status automatically.

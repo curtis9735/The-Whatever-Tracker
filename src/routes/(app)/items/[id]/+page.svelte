@@ -6,13 +6,14 @@
 	import { formatFieldValue } from '$lib/fields';
 	import { imageSrc } from '$lib/images';
 	import { categoryColor, PROVIDER_LABELS } from '$lib/kinds';
-	import type { SetlistEvent, MetadataFact } from '$lib/types';
+	import type { SetlistEvent, MetadataFact, SearchResult } from '$lib/types';
 	import Icon from '$lib/components/Icon.svelte';
 	import ImagePicker from '$lib/components/ImagePicker.svelte';
 	import LogFields from '$lib/components/LogFields.svelte';
 	import Rating from '$lib/components/Rating.svelte';
 	import RatingInput from '$lib/components/RatingInput.svelte';
 	import SetlistPicker from '$lib/components/SetlistPicker.svelte';
+	import MetadataMatch from '$lib/components/MetadataMatch.svelte';
 
 	let { data, form } = $props();
 
@@ -77,6 +78,20 @@
 	}
 
 	const isUrl = (s: string) => /^https?:\/\//.test(s);
+
+	// Items added by hand in a list with a metadata source can be matched afterwards
+	const matchKinds = $derived(data.searchKinds.filter((k) => cat.providerKinds.includes(k)));
+	const canLink = $derived(
+		matchKinds.length > 0 &&
+			!(item.provider && data.searchKinds.some((k) => k.startsWith(`${item.provider}:`)))
+	);
+	const linkSources = $derived(
+		[...new Set(matchKinds.map((k) => PROVIDER_LABELS[k.split(':')[0]]))].join(' or ')
+	);
+	let linkOpen = $state(false);
+	// svelte-ignore state_referenced_locally
+	let linkQuery = $state(data.item.title);
+	let linkMatch = $state<SearchResult | null>(null);
 </script>
 
 <svelte:head><title>{item.title} · The Whatever Tracker</title></svelte:head>
@@ -217,6 +232,53 @@
 				<h2 class="section-title mb-1">Notes</h2>
 				<p class="text-sm whitespace-pre-line">{item.notes}</p>
 			</div>
+		{/if}
+
+		{#if canLink}
+			<section class="card mt-5 p-4">
+				{#if !linkOpen}
+					<div class="flex flex-wrap items-center gap-3">
+						<p class="flex-1 text-sm text-muted">No poster or details yet.</p>
+						<button class="btn btn-primary btn-sm" onclick={() => (linkOpen = true)}>
+							<Icon name="search" size={14} /> Find details on {linkSources}
+						</button>
+					</div>
+				{:else}
+					<form
+						method="POST"
+						action="?/link"
+						class="space-y-3"
+						use:enhance={() => {
+							busy = true;
+							return async ({ result, update }) => {
+								await update();
+								busy = false;
+								if (result.type === 'success') linkOpen = false;
+							};
+						}}
+					>
+						<div>
+							<label class="label" for="link-query">Look up</label>
+							<input class="input" id="link-query" bind:value={linkQuery} autocomplete="off" />
+						</div>
+						<MetadataMatch kinds={matchKinds} query={linkQuery} bind:selected={linkMatch} />
+						<div class="flex gap-2">
+							<button class="btn btn-primary btn-sm" disabled={!linkMatch || busy}>
+								{busy ? 'Loading details…' : 'Use this match'}
+							</button>
+							<button type="button" class="btn btn-sm" onclick={() => (linkOpen = false)}>Cancel</button>
+						</div>
+					</form>
+				{/if}
+				{#if form?.linkError}
+					<p class="error-box mt-3">
+						{form.linkError}
+						{#if 'existingId' in form && form.existingId}
+							<a class="font-medium underline" href="/items/{form.existingId}">Open it</a>
+						{/if}
+					</p>
+				{/if}
+			</section>
 		{/if}
 
 		{#if item.description || meta?.facts?.length}

@@ -3,6 +3,7 @@ import { getCategoryById, getCategoryBySlug, listCategories } from '$lib/server/
 import { addImage, addLog, createItem, imageSourcesFromForm, listUserTags } from '$lib/server/services/items';
 import { parseItemForm, parseLogForm, todayIso, wantsLog } from '$lib/server/forms';
 import { ImageError } from '$lib/server/images/store';
+import { findExisting, linkToProvider, lookupFailure, parseMatch } from '$lib/server/services/provider-items';
 import type { Actions, PageServerLoad } from './$types';
 
 export const load: PageServerLoad = async ({ locals, url }) => {
@@ -42,8 +43,25 @@ export const actions: Actions = {
 		const log = wantsLog(form) ? parseLogForm(form, category, logFields) : null;
 		if (log && !log.ok) return fail(400, { message: log.error });
 
+		// A match picked from TMDB etc.: refuse duplicates before creating anything
+		const match = parseMatch(form);
+		if (match) {
+			const existing = findExisting(userId, match.provider, match.kind, match.id);
+			if (existing) {
+				return fail(400, { message: 'That one is already in your library.', existingId: existing });
+			}
+		}
+
 		const item = createItem(userId, parsed.data, parsed.tags);
 		const warnings: string[] = [];
+		if (match) {
+			// Before the user's photos, so the poster becomes the cover
+			try {
+				await linkToProvider(userId, item.id, match);
+			} catch (e) {
+				warnings.push(`Saved, but the details couldn't be loaded: ${lookupFailure(e)}`);
+			}
+		}
 		for (const src of imageSourcesFromForm(form, 'img_')) {
 			try {
 				await addImage(userId, { itemId: item.id }, src);

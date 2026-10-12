@@ -5,13 +5,36 @@
 	import ImagePicker from '$lib/components/ImagePicker.svelte';
 	import ItemForm from '$lib/components/ItemForm.svelte';
 	import LogFields from '$lib/components/LogFields.svelte';
+	import MetadataMatch from '$lib/components/MetadataMatch.svelte';
+	import { KIND_BY_KEY, PROVIDER_LABELS } from '$lib/kinds';
+	import type { SearchResult } from '$lib/types';
 
 	let { data, form } = $props();
 	const cat = $derived(data.chosen.category);
 	let addLog = $state(false);
 	let busy = $state(false);
 
+	// Look the name up on this list's metadata sources (e.g. TMDB for Movies) as it's typed
+	// svelte-ignore state_referenced_locally
+	let title = $state(data.defaults.title);
+	let match = $state<SearchResult | null>(null);
+	const matchKinds = $derived(data.searchKinds.filter((k) => cat.providerKinds.includes(k)));
+	const missingSources = $derived(
+		[
+			...new Set(
+				cat.providerKinds
+					.filter((k) => KIND_BY_KEY.has(k) && !data.searchKinds.includes(k))
+					.map((k) => PROVIDER_LABELS[k.split(':')[0]])
+			)
+		].join(' and ')
+	);
+
+	function onMatch(r: SearchResult | null) {
+		if (r) title = r.title;
+	}
+
 	function switchCategory(slug: string) {
+		match = null;
 		const sp = new URLSearchParams(page.url.searchParams);
 		sp.set('category', slug);
 		// Keep what was typed so far when the form re-renders for the other list
@@ -38,8 +61,12 @@
 		>
 			{#each data.categories as c (c.id)}<option value={c.slug}>{c.icon} {c.name}</option>{/each}
 		</select>
-		{#if cat.providerKinds.length && data.searchKinds.some((k) => cat.providerKinds.includes(k))}
-			<p class="hint">Tip: use Search to fill in details and artwork automatically.</p>
+		{#if missingSources && !matchKinds.length}
+			<p class="hint">
+				Connect {missingSources} under
+				<a class="text-accent underline" href="/settings#integrations">Me → Integrations</a> to fill in posters
+				and details automatically.
+			</p>
 		{/if}
 	</div>
 
@@ -56,20 +83,34 @@
 		}}
 	>
 		<input type="hidden" name="categoryId" value={cat.id} />
-		{#if form?.message}<p class="error-box" role="alert">{form.message}</p>{/if}
+		{#if form?.message}
+			<p class="error-box" role="alert">
+				{form.message}
+				{#if 'existingId' in form && form.existingId}
+					<a class="font-medium underline" href="/items/{form.existingId}">Open it</a>
+				{/if}
+			</p>
+		{/if}
 
 		{#key cat.id}
 			<ItemForm
 				category={cat}
 				itemFields={data.chosen.itemFields}
 				allTags={data.allTags}
+				bind:title
 				values={{
 					title: data.defaults.title,
 					subtitle: data.defaults.subtitle,
 					barcode: data.defaults.barcode,
 					status: cat.statuses[0]?.key
 				}}
-			/>
+			>
+				{#snippet afterTitle()}
+					{#if matchKinds.length}
+						<MetadataMatch kinds={matchKinds} query={title} bind:selected={match} onselect={onMatch} />
+					{/if}
+				{/snippet}
+			</ItemForm>
 		{/key}
 
 		<div class="card p-4">
