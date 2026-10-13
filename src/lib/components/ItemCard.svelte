@@ -22,6 +22,7 @@
 			favorite: boolean;
 			custom: Record<string, unknown>;
 			logCount: number;
+			lastLoggedAt: string | null;
 			image: ImageRef | null;
 		};
 		statuses: StatusDef[];
@@ -38,6 +39,11 @@
 			.map((f) => formatFieldValue(f, item.custom[f.key]))
 			.filter(Boolean)
 			.join(' · ')
+	);
+	const lastLogged = $derived(
+		item.lastLoggedAt
+			? new Date(`${item.lastLoggedAt}T00:00:00`).toLocaleDateString(undefined, { dateStyle: 'medium' })
+			: ''
 	);
 	let broken = $state(false);
 </script>
@@ -95,7 +101,8 @@
 				{[
 					statusLabel,
 					extras,
-					item.logCount ? `${item.logCount} ${item.logCount === 1 ? 'log' : 'logs'}` : ''
+					item.logCount ? `${item.logCount} ${item.logCount === 1 ? 'log' : 'logs'}` : '',
+					lastLogged ? `last ${lastLogged}` : ''
 				]
 					.filter(Boolean)
 					.join(' · ')}
