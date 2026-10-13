@@ -95,7 +95,7 @@
 								{prettyDate(a.date)}{a.location ? ` · ${a.location}` : ''}{a.notes ? ` · ${a.notes}` : ''}
 							</p>
 						</div>
-						<Rating value={a.log_rating} scale={a.rating_scale} class="text-sm" />
+						<Rating value={a.log_rating} class="text-sm" />
 					</a>
 				</li>
 			{/each}

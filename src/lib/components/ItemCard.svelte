@@ -1,14 +1,13 @@
 <script lang="ts">
 	import { formatFieldValue } from '$lib/fields';
 	import { imageSrc, type ImageRef } from '$lib/images';
-	import type { FieldDef, RatingScale, StatusDef } from '$lib/types';
+	import type { FieldDef, StatusDef } from '$lib/types';
 	import Icon from './Icon.svelte';
 	import Rating from './Rating.svelte';
 
 	let {
 		item,
 		statuses,
-		scale,
 		cardFields,
 		icon,
 		view = 'grid'
@@ -26,7 +25,6 @@
 			image: ImageRef | null;
 		};
 		statuses: StatusDef[];
-		scale: RatingScale;
 		cardFields: FieldDef[];
 		icon: string;
 		view?: 'grid' | 'list';
@@ -71,7 +69,7 @@
 			{/if}
 			{#if item.rating !== null}
 				<span class="absolute bottom-2 left-2 rounded-lg bg-black/60 px-1.5 py-0.5 text-xs text-white">
-					<Rating value={item.rating} {scale} />
+					<Rating value={item.rating} />
 				</span>
 			{/if}
 		</div>
@@ -108,6 +106,6 @@
 					.join(' · ')}
 			</p>
 		</div>
-		<Rating value={item.rating} {scale} class="text-sm" />
+		<Rating value={item.rating} class="text-sm" />
 	</a>
 {/if}

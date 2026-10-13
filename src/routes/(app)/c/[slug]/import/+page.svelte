@@ -258,8 +258,8 @@
 							</label>
 						</div>
 						<p class="hint">
-							A cell like “2.5/5” or “8 out of 10” keeps its own scale. Everything is converted to this list's
-							rating scale.
+							A cell like “2.5/5” or “8 out of 10” keeps its own scale. Everything is converted to a whole
+							number out of 10.
 						</p>
 					</div>
 				{/if}

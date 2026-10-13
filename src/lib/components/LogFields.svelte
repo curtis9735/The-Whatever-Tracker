@@ -1,10 +1,9 @@
 <script lang="ts">
-	import type { FieldDef, RatingScale } from '$lib/types';
+	import type { FieldDef } from '$lib/types';
 	import FieldInput from './FieldInput.svelte';
 	import RatingInput from './RatingInput.svelte';
 
 	let {
-		scale,
 		logFields,
 		values = {},
 		dateDefault,
@@ -14,7 +13,6 @@
 		showDate = true,
 		showRating = true
 	}: {
-		scale: RatingScale;
 		logFields: FieldDef[];
 		values?: {
 			date?: string;
@@ -61,13 +59,7 @@
 		</div>
 	</div>
 	{#if showRating}
-		<RatingInput
-			{scale}
-			name="log_rating"
-			id="log_rating"
-			value={values.rating ?? null}
-			label="Rating this time"
-		/>
+		<RatingInput name="log_rating" id="log_rating" value={values.rating ?? null} label="Rating this time" />
 	{/if}
 	{#if logFields.length}
 		<div class="grid gap-4 sm:grid-cols-2">

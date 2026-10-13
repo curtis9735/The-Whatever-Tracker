@@ -1,7 +1,7 @@
 <script lang="ts">
 	import type { Snippet } from 'svelte';
 	import { toDisplay } from '$lib/ratings';
-	import type { FieldDef, RatingScale, StatusDef } from '$lib/types';
+	import type { FieldDef, StatusDef } from '$lib/types';
 	import FieldInput from './FieldInput.svelte';
 	import RatingInput from './RatingInput.svelte';
 
@@ -16,7 +16,7 @@
 		title = $bindable(),
 		status = $bindable()
 	}: {
-		category: { ratingScale: RatingScale; statuses: StatusDef[] };
+		category: { statuses: StatusDef[] };
 		itemFields: FieldDef[];
 		values: {
 			title?: string | null;
@@ -49,8 +49,8 @@
 
 	// svelte-ignore state_referenced_locally
 	let showMore = $state(!!(values.description || values.barcode));
-	// Re-key the rating widget if the scale changes
-	const ratingKey = $derived(`${category.ratingScale}:${toDisplay(values.rating, category.ratingScale)}`);
+	// Re-key the rating widget when the rating it starts from changes
+	const ratingKey = $derived(String(toDisplay(values.rating)));
 </script>
 
 <div class="space-y-4">
@@ -104,12 +104,7 @@
 	{@render afterStatus?.()}
 
 	{#key ratingKey}
-		<RatingInput
-			scale={category.ratingScale}
-			value={values.rating ?? null}
-			name="rating"
-			label="Your rating"
-		/>
+		<RatingInput value={values.rating ?? null} name="rating" label="Your rating" />
 	{/key}
 
 	{#if itemFields.length}

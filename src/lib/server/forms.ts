@@ -35,7 +35,7 @@ export function parseItemForm(
 			subtitle: str(form, 'subtitle', 300),
 			description: str(form, 'description', 20000),
 			status: status && category.statuses.some((s) => s.key === status) ? status : null,
-			rating: parseRatingInput(form.get('rating'), category.ratingScale),
+			rating: parseRatingInput(form.get('rating')),
 			favorite: form.get('favorite') === 'on',
 			barcode: str(form, 'barcode', 40)?.replace(/\s/g, '') ?? null,
 			notes: str(form, 'notes', 20000),
@@ -76,7 +76,7 @@ export function parseLogForm(
 		ok: true,
 		data: {
 			date,
-			rating: parseRatingInput(form.get('log_rating'), category.ratingScale),
+			rating: parseRatingInput(form.get('log_rating')),
 			notes: str(form, 'log_notes', 20000),
 			location: str(form, 'log_location', 300),
 			price,

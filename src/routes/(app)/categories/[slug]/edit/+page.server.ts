@@ -16,7 +16,7 @@ import { setlistfmEnabled } from '$lib/server/providers/setlistfm';
 import { CATEGORY_COLORS, KINDS, LOG_SOURCES } from '$lib/kinds';
 import { cleanIcon } from '$lib/icons';
 import { FIELD_TYPES, slugify } from '$lib/fields';
-import type { FieldType, RatingScale } from '$lib/types';
+import type { FieldType } from '$lib/types';
 import type { Actions, PageServerLoad } from './$types';
 
 const StatusList = z
@@ -69,8 +69,6 @@ export const actions: Actions = {
 			.trim()
 			.slice(0, 60);
 		if (!name) return fail(400, { message: 'Give the list a name.' });
-		const ratingScale = String(form.get('ratingScale')) as RatingScale;
-		if (!['5star', '10', '100'].includes(ratingScale)) return fail(400, { message: 'Pick a rating scale.' });
 		const color = String(form.get('color') ?? 'slate');
 
 		let statusesRaw: unknown;
@@ -107,7 +105,6 @@ export const actions: Actions = {
 			name,
 			icon: cleanIcon(form.get('icon')),
 			color: color in CATEGORY_COLORS ? color : 'slate',
-			ratingScale,
 			statuses,
 			providerKinds
 		});

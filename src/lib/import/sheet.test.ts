@@ -19,7 +19,6 @@ import { detectDelimiter, MAX_ROWS, parseTable } from './table';
 // The Whiskey template's list shape
 const whiskey: ListContext = {
 	name: 'Whiskey',
-	ratingScale: '100',
 	statuses: [
 		{ key: 'wishlist', label: 'Wishlist', group: 'planned' },
 		{ key: 'sealed', label: 'Sealed', group: 'active' },
@@ -246,8 +245,8 @@ describe('building rows', () => {
 		expect(rows[0].log).toBeUndefined(); // no date column, so no log
 	});
 
-	it('converts ratings onto the list scale, and uses the picked scale for bare numbers', () => {
-		const stars = { ...whiskey, ratingScale: '5star' as const };
+	it('converts ratings to whole numbers out of 10, and uses the picked scale for bare numbers', () => {
+		const stars = whiskey;
 		const rate = (sheet: string, pick?: number) => {
 			const t = parseTable(sheet);
 			const m = guessMapping(t, stars);
@@ -255,10 +254,11 @@ describe('building rows', () => {
 		};
 		// Bare numbers up to 5 are stars; a cell that states its own scale keeps it
 		expect(rate('Name\tRating\nA\t4.5\nB\t3\nC\t8/10')).toEqual([90, 60, 80]);
-		// Up to 10 means out of 10, and the 5-star list snaps to its halves
+		// Up to 10 means out of 10
 		expect(rate('Name\tRating\nA\t9\nB\t6')).toEqual([90, 60]);
-		// Bigger numbers mean out of 100
+		// Bigger numbers mean out of 100, and anything between rounds to a whole number out of 10
 		expect(rate('Name\tRating\nA\t85\nB\t60')).toEqual([90, 60]);
+		expect(rate('Name\tRating\nA\t7.5/10\nB\t3.5/5')).toEqual([80, 70]);
 		// The scale can be picked by hand: "4" is 4 out of 10, not 4 stars
 		expect(rate('Name\tRating\nA\t4\nB\t3', 10)).toEqual([40, 30]);
 		// Above the scale is left out, not clamped

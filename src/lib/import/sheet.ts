@@ -3,8 +3,8 @@
 // (it never trusts what the browser worked out).
 
 import { fieldKey } from '../fields';
-import { formatRating, SCALES, toStored } from '../ratings';
-import type { FieldDef, FieldType, RatingScale, StatusDef } from '../types';
+import { formatRating, RATING_MAX, toStored } from '../ratings';
+import type { FieldDef, FieldType, StatusDef } from '../types';
 import type { Table } from './table';
 
 // --- Mapping ----------------------------------------------------------------------------
@@ -39,7 +39,6 @@ export interface ImportMapping {
 
 export interface ListContext {
 	name: string;
-	ratingScale: RatingScale;
 	statuses: StatusDef[];
 	itemFields: FieldDef[];
 	logFields: FieldDef[];
@@ -628,9 +627,8 @@ export function buildRows(table: Table, mapping: ImportMapping, ctx: ListContext
 							out.shown[j] = cell;
 							break;
 						}
-						const display = (r.value / max) * SCALES[ctx.ratingScale].max;
-						out.rating = toStored(display, ctx.ratingScale);
-						out.shown[j] = formatRating(out.rating, ctx.ratingScale);
+						out.rating = toStored((r.value / max) * RATING_MAX);
+						out.shown[j] = formatRating(out.rating);
 						if (mapping.ratingNotes && r.rest) notes.push(r.rest);
 						break;
 					}

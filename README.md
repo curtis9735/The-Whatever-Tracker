@@ -185,9 +185,11 @@ list has **TV shows** ticked.
   Artists from MusicBrainz get a photo from Wikimedia Commons (via Wikidata), or from Deezer when Commons has
   none. For artists added before v0.2.6, open **About → Refresh details** on their page to fetch it.
 
-- **Lists:** **Manage lists** lets you rename lists, reorder them, pick an emoji and color, choose a rating scale
-  (5 stars with halves, 10 points or 100 points; existing ratings convert automatically), edit the statuses and
-  their groups, choose what the list holds so details fill in automatically, and add or remove fields.
+- **Ratings:** everything is rated with a whole number from 1 to 10, on items and on each log. There are no
+  half steps and no per-list scale, so ratings compare across lists. Tap a number to rate, tap **Clear** to
+  remove it.
+- **Lists:** **Manage lists** lets you rename lists, reorder them, pick an emoji and color, edit the statuses
+  and their groups, choose what the list holds so details fill in automatically, and add or remove fields.
 - **Spreadsheet import:** to bring in a table you already keep (a whiskey spreadsheet, say), open the list and
   tap the upload icon beside the settings gear (or **Me → Your data**, then pick the list). Select the cells in
   your spreadsheet **including the header row**, copy, and paste them in, or choose a CSV file. Only include the
@@ -196,8 +198,8 @@ list has **TV shows** ticked.
     "Cost" column fills a Price field), status, rating, notes, tags, a photo link, or **Skip**. A column the
     list has no field for can become a new field (text, number, date, yes/no or link). Change any guess in the
     dropdown above the column.
-  - **Ratings** like `2.5/5`, `8 out of 10`, `90%` or `★★★½` are converted to the list's rating scale. Text
-    after the rating (`4.5/5  Really smooth`) goes into the item's notes.
+  - **Ratings** like `2.5/5`, `8 out of 10`, `90%` or `★★★½` are converted to a whole number out of 10 (so `4.5/5`
+    becomes 9). Text after the rating (`4.5/5  Really smooth`) goes into the item's notes.
   - **Status:** you say what each value means. By default a ✓ (or yes, x…) becomes the list's "done" status,
     like Tasted, Seen or Completed, and a blank cell becomes the first planned one, like Wishlist.
   - **Dates:** add a Date column and each row also gets a dated log, with Where, notes and the list's log fields

@@ -5,7 +5,6 @@
 	import IconPicker from '$lib/components/IconPicker.svelte';
 	import { FIELD_TYPES } from '$lib/fields';
 	import { PROVIDER_LABELS } from '$lib/kinds';
-	import { SCALES } from '$lib/ratings';
 	import type { StatusGroup } from '$lib/types';
 
 	let { data, form } = $props();
@@ -96,16 +95,6 @@
 					{/each}
 				</div>
 			</fieldset>
-
-			<div>
-				<label class="label" for="ratingScale">Rating scale</label>
-				<select class="input sm:w-64" id="ratingScale" name="ratingScale">
-					{#each Object.entries(SCALES) as [key, s] (key)}
-						<option value={key} selected={c.ratingScale === key}>{s.label}</option>
-					{/each}
-				</select>
-				<p class="hint">Existing ratings convert automatically.</p>
-			</div>
 
 			<fieldset>
 				<legend class="label">Statuses</legend>

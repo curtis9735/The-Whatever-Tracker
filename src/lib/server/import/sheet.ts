@@ -40,7 +40,6 @@ export function listContext(userId: number, categoryId: number): ListContext {
 	const { category, itemFields, logFields } = getCategoryById(userId, categoryId);
 	return {
 		name: category.name,
-		ratingScale: category.ratingScale,
 		statuses: category.statuses,
 		itemFields,
 		logFields,

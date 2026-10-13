@@ -23,7 +23,7 @@ export const load: PageServerLoad = async ({ locals, params, url }) => {
 		status: sp.get('status'),
 		group: sp.get('group'),
 		tag: sp.get('tag'),
-		minRating: parseRatingInput(sp.get('min'), category.ratingScale),
+		minRating: parseRatingInput(sp.get('min')),
 		favorite: sp.get('fav') === '1',
 		q: sp.get('q')?.trim() || null,
 		field:

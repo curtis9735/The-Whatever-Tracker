@@ -84,8 +84,7 @@ export const actions: Actions = {
 	rate: async ({ request, locals, params }) => {
 		const userId = locals.user!.id;
 		const item = getOwnedItem(userId, itemId(params));
-		const { category } = getCategoryById(userId, item.categoryId);
-		const rating = parseRatingInput((await request.formData()).get('rating'), category.ratingScale);
+		const rating = parseRatingInput((await request.formData()).get('rating'));
 		updateItem(userId, item.id, { rating });
 	},
 

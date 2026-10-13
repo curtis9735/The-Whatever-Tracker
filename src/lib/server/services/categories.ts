@@ -3,7 +3,7 @@ import { error } from '@sveltejs/kit';
 import { db, schema } from '../db';
 import { TEMPLATE_BY_KEY, DEFAULT_STATUSES, type CategoryTemplate } from '../templates';
 import { fieldKey, slugify } from '$lib/fields';
-import type { FieldDef, FieldScope, FieldType, RatingScale, StatusDef } from '$lib/types';
+import type { FieldDef, FieldScope, FieldType, StatusDef } from '$lib/types';
 import type { Category, FieldDefinition } from '../db/schema';
 
 export function listCategories(userId: number) {
@@ -14,7 +14,6 @@ export function listCategories(userId: number) {
 			slug: schema.categories.slug,
 			icon: schema.categories.icon,
 			color: schema.categories.color,
-			ratingScale: schema.categories.ratingScale,
 			statuses: schema.categories.statuses,
 			providerKinds: schema.categories.providerKinds,
 			sortOrder: schema.categories.sortOrder,
@@ -108,7 +107,6 @@ export interface CategoryInput {
 	name: string;
 	icon: string;
 	color: string;
-	ratingScale: RatingScale;
 	statuses: StatusDef[];
 	providerKinds: string[];
 }
@@ -122,7 +120,6 @@ export function createCategory(userId: number, input: CategoryInput, templateKey
 			slug: uniqueSlug(userId, input.name),
 			icon: input.icon || '📦',
 			color: input.color,
-			ratingScale: input.ratingScale,
 			statuses: input.statuses.length ? input.statuses : DEFAULT_STATUSES,
 			providerKinds: input.providerKinds,
 			templateKey,
@@ -211,7 +208,6 @@ function createFromTemplate(userId: number, t: CategoryTemplate) {
 				name: t.name,
 				icon: t.icon,
 				color: t.color,
-				ratingScale: t.ratingScale,
 				statuses: t.statuses,
 				providerKinds: t.providerKinds
 			},
@@ -247,7 +243,6 @@ export function updateCategory(userId: number, id: number, input: CategoryInput)
 			slug,
 			icon: input.icon || '📦',
 			color: input.color,
-			ratingScale: input.ratingScale,
 			statuses: input.statuses,
 			providerKinds: input.providerKinds
 		})

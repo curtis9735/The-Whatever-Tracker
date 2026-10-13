@@ -1,7 +1,5 @@
 // Types shared by server and client code.
 
-export type RatingScale = '5star' | '10' | '100';
-
 export type StatusGroup = 'planned' | 'active' | 'done' | 'dropped';
 
 export interface StatusDef {
@@ -63,7 +61,6 @@ export interface LocalSearchHit {
 	categorySlug: string;
 	status: string | null;
 	rating: number | null;
-	ratingScale: RatingScale;
 	imageUrl: string | null;
 }
 

@@ -140,7 +140,6 @@
 								</summary>
 								<div class="mt-3 space-y-4">
 									<LogFields
-										scale={cat.ratingScale}
 										logFields={data.chosen.logFields}
 										dateDefault={data.today}
 										showDate={false}

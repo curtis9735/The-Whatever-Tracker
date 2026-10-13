@@ -86,7 +86,6 @@
 		{/if}
 
 		<LogFields
-			scale={data.category.ratingScale}
 			logFields={data.logFields}
 			values={data.log}
 			dateDefault={data.today}

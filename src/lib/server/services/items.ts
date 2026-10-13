@@ -519,7 +519,7 @@ export function recentActivity(userId: number, limit = 15) {
 	return rawDb()
 		.prepare(
 			`SELECT l.id AS log_id, l.date, l.rating AS log_rating, l.notes, l.location,
-				i.id AS item_id, i.title, c.name AS category_name, c.icon AS category_icon, c.rating_scale,
+				i.id AS item_id, i.title, c.name AS category_name, c.icon AS category_icon,
 				im.kind AS img_kind, im.path AS img_path, im.thumb_path AS img_thumb, im.source_url AS img_source
 			 FROM item_logs l
 			 JOIN items i ON i.id = l.item_id
@@ -539,7 +539,6 @@ export function recentActivity(userId: number, limit = 15) {
 		title: string;
 		category_name: string;
 		category_icon: string;
-		rating_scale: '5star' | '10' | '100';
 		img_kind: Image['kind'] | null;
 		img_path: string | null;
 		img_thumb: string | null;

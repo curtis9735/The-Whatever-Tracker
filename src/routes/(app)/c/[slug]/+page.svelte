@@ -135,8 +135,8 @@
 			</div>
 		{/if}
 		<div>
-			<label class="label" for="flt-min">Minimum rating</label>
-			<input class="input" id="flt-min" name="min" type="number" step="any" min="0" value={f.min} />
+			<label class="label" for="flt-min">Minimum rating (out of 10)</label>
+			<input class="input" id="flt-min" name="min" type="number" step="1" min="1" max="10" value={f.min} />
 		</div>
 		{#if data.filterable.length}
 			<div>
@@ -183,26 +183,13 @@
 {:else if data.view === 'grid'}
 	<div class="grid grid-cols-2 gap-x-3 gap-y-5 sm:grid-cols-3 md:grid-cols-4 lg:grid-cols-5 xl:grid-cols-6">
 		{#each data.rows as item (item.id)}
-			<ItemCard
-				{item}
-				statuses={c.statuses}
-				scale={c.ratingScale}
-				cardFields={data.cardFields}
-				icon={c.icon}
-			/>
+			<ItemCard {item} statuses={c.statuses} cardFields={data.cardFields} icon={c.icon} />
 		{/each}
 	</div>
 {:else}
 	<div class="card divide-y divide-border overflow-hidden">
 		{#each data.rows as item (item.id)}
-			<ItemCard
-				{item}
-				statuses={c.statuses}
-				scale={c.ratingScale}
-				cardFields={data.cardFields}
-				icon={c.icon}
-				view="list"
-			/>
+			<ItemCard {item} statuses={c.statuses} cardFields={data.cardFields} icon={c.icon} view="list" />
 		{/each}
 	</div>
 {/if}

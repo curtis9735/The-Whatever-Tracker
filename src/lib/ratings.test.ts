@@ -2,36 +2,37 @@ import { describe, expect, it } from 'vitest';
 import { formatRating, parseRatingInput, toDisplay, toStored } from './ratings';
 
 describe('ratings', () => {
-	it('stores every scale as 0–100', () => {
-		expect(toStored(4.5, '5star')).toBe(90);
-		expect(toStored(8.5, '10')).toBe(85);
-		expect(toStored(92, '100')).toBe(92);
-		expect(toStored(null, '5star')).toBeNull();
+	it('are whole numbers out of 10, stored as tens', () => {
+		expect(toStored(8)).toBe(80);
+		expect(toStored(10)).toBe(100);
+		expect(toStored(1)).toBe(10);
+		expect(toStored(null)).toBeNull();
+		expect(toStored(undefined)).toBeNull();
 	});
 
-	it('snaps to the scale step and clamps', () => {
-		expect(toStored(3.3, '5star')).toBe(70); // 3.5 stars
-		expect(toStored(12, '10')).toBe(100);
-		expect(toStored(-1, '100')).toBe(0);
+	it('round to a whole number and clamp', () => {
+		expect(toStored(7.4)).toBe(70);
+		expect(toStored(7.5)).toBe(80);
+		expect(toStored(12)).toBe(100);
+		expect(toStored(-1)).toBe(0);
 	});
 
-	it('round-trips between scales', () => {
-		const stored = toStored(4, '5star')!;
-		expect(toDisplay(stored, '10')).toBe(8);
-		expect(toDisplay(stored, '100')).toBe(80);
-		expect(toDisplay(toStored(87, '100'), '5star')).toBe(4.5);
+	it('read back what was stored', () => {
+		expect(toDisplay(toStored(6))).toBe(6);
+		expect(toDisplay(85)).toBe(9); // an old value that wasn't a multiple of ten
+		expect(toDisplay(null)).toBeNull();
 	});
 
-	it('formats for display', () => {
-		expect(formatRating(90, '5star')).toBe('4.5★');
-		expect(formatRating(85, '10')).toBe('8.5/10');
-		expect(formatRating(92, '100')).toBe('92/100');
-		expect(formatRating(null, '10')).toBe('');
+	it('format for display', () => {
+		expect(formatRating(90)).toBe('9/10');
+		expect(formatRating(0)).toBe('0/10');
+		expect(formatRating(null)).toBe('');
 	});
 
-	it('parses form input', () => {
-		expect(parseRatingInput('', '10')).toBeNull();
-		expect(parseRatingInput('abc', '10')).toBeNull();
-		expect(parseRatingInput('7.5', '10')).toBe(75);
+	it('parse form input', () => {
+		expect(parseRatingInput('')).toBeNull();
+		expect(parseRatingInput('abc')).toBeNull();
+		expect(parseRatingInput('7')).toBe(70);
+		expect(parseRatingInput('7.5')).toBe(80);
 	});
 });

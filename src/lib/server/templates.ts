@@ -1,4 +1,4 @@
-import type { FieldScope, FieldType, RatingScale, StatusDef } from '$lib/types';
+import type { FieldScope, FieldType, StatusDef } from '$lib/types';
 
 export interface TemplateField {
 	key: string;
@@ -16,7 +16,6 @@ export interface CategoryTemplate {
 	icon: string;
 	color: string;
 	description: string;
-	ratingScale: RatingScale;
 	statuses: StatusDef[];
 	providerKinds: string[];
 	fields: TemplateField[];
@@ -44,7 +43,6 @@ export const TEMPLATES: CategoryTemplate[] = [
 		icon: '🎬',
 		color: 'indigo',
 		description: 'Films, with posters and details from TMDB.',
-		ratingScale: '10',
 		statuses: watchStatuses.filter((s) => s.key !== 'paused'),
 		providerKinds: ['tmdb:movie'],
 		fields: [{ key: 'where_watched', label: 'Where watched', type: 'text', scope: 'log' }]
@@ -55,7 +53,6 @@ export const TEMPLATES: CategoryTemplate[] = [
 		icon: '📺',
 		color: 'sky',
 		description: 'Series from TMDB, with season and episode progress.',
-		ratingScale: '10',
 		statuses: watchStatuses,
 		providerKinds: ['tmdb:tv'],
 		fields: [
@@ -69,7 +66,6 @@ export const TEMPLATES: CategoryTemplate[] = [
 		icon: '🎮',
 		color: 'violet',
 		description: 'Games from IGDB.',
-		ratingScale: '10',
 		statuses: [
 			{ key: 'backlog', label: 'Backlog', group: 'planned' },
 			{ key: 'playing', label: 'Playing', group: 'active' },
@@ -89,7 +85,6 @@ export const TEMPLATES: CategoryTemplate[] = [
 		icon: '🎲',
 		color: 'amber',
 		description: 'Your shelf and plays, with data from BoardGameGeek.',
-		ratingScale: '10',
 		statuses: [
 			{ key: 'wishlist', label: 'Wishlist', group: 'planned' },
 			{ key: 'owned', label: 'Owned', group: 'active' },
@@ -108,7 +103,6 @@ export const TEMPLATES: CategoryTemplate[] = [
 		icon: '🎤',
 		color: 'rose',
 		description: 'Artists you have seen live. Each show is a log, with the setlist from setlist.fm.',
-		ratingScale: '5star',
 		statuses: [
 			{ key: 'want', label: 'Want to see', group: 'planned' },
 			{ key: 'seen', label: 'Seen', group: 'done' }
@@ -125,7 +119,6 @@ export const TEMPLATES: CategoryTemplate[] = [
 		icon: '💿',
 		color: 'teal',
 		description: 'Albums and EPs from MusicBrainz, with cover art.',
-		ratingScale: '5star',
 		statuses: [
 			{ key: 'to-listen', label: 'To listen', group: 'planned' },
 			{ key: 'listened', label: 'Listened', group: 'done' },
@@ -142,7 +135,6 @@ export const TEMPLATES: CategoryTemplate[] = [
 		icon: '🥃',
 		color: 'orange',
 		description: 'Bottles and tasting notes.',
-		ratingScale: '100',
 		statuses: [
 			{ key: 'wishlist', label: 'Wishlist', group: 'planned' },
 			{ key: 'sealed', label: 'Sealed', group: 'active' },
@@ -175,7 +167,6 @@ export const TEMPLATES: CategoryTemplate[] = [
 		icon: '🍷',
 		color: 'red',
 		description: 'Bottles, vintages and tastings.',
-		ratingScale: '100',
 		statuses: tastingStatuses(),
 		providerKinds: [],
 		fields: [
@@ -198,7 +189,6 @@ export const TEMPLATES: CategoryTemplate[] = [
 		icon: '🧀',
 		color: 'amber',
 		description: 'Every cheese worth remembering.',
-		ratingScale: '5star',
 		statuses: tastingStatuses(),
 		providerKinds: [],
 		fields: [
@@ -226,7 +216,6 @@ export const TEMPLATES: CategoryTemplate[] = [
 		icon: '🌶️',
 		color: 'red',
 		description: 'Heat, flavor and where to get more.',
-		ratingScale: '5star',
 		statuses: tastingStatuses(),
 		providerKinds: [],
 		fields: [
@@ -243,7 +232,6 @@ export const TEMPLATES: CategoryTemplate[] = [
 		icon: '🐈',
 		color: 'pink',
 		description: 'Favorite cats you have met. Each encounter is a log with photos.',
-		ratingScale: '5star',
 		statuses: [
 			{ key: 'friend', label: 'Friend', group: 'done' },
 			{ key: 'acquaintance', label: 'Acquaintance', group: 'active' },

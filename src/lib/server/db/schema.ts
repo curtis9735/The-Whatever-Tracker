@@ -1,6 +1,6 @@
 import { sql } from 'drizzle-orm';
 import { index, integer, primaryKey, real, sqliteTable, text, uniqueIndex } from 'drizzle-orm/sqlite-core';
-import type { FieldScope, FieldType, RatingScale, StatusDef } from '$lib/types';
+import type { FieldScope, FieldType, StatusDef } from '$lib/types';
 
 const createdAt = () =>
 	integer('created_at', { mode: 'timestamp_ms' })
@@ -41,7 +41,6 @@ export const categories = sqliteTable(
 		slug: text('slug').notNull(),
 		icon: text('icon').notNull().default('📦'),
 		color: text('color').notNull().default('slate'),
-		ratingScale: text('rating_scale').$type<RatingScale>().notNull().default('5star'),
 		statuses: text('statuses', { mode: 'json' }).$type<StatusDef[]>().notNull(),
 		providerKinds: text('provider_kinds', { mode: 'json' })
 			.$type<string[]>()
@@ -90,7 +89,7 @@ export const items = sqliteTable(
 		subtitle: text('subtitle'),
 		description: text('description'),
 		status: text('status'),
-		/** 0–100, displayed in the category's rating scale */
+		/** 0–100 in tens: a whole number out of 10 */
 		rating: integer('rating'),
 		favorite: integer('favorite', { mode: 'boolean' }).notNull().default(false),
 		barcode: text('barcode'),

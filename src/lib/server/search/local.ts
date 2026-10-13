@@ -1,5 +1,5 @@
 import { rawDb } from '../db';
-import type { LocalSearchHit, RatingScale } from '$lib/types';
+import type { LocalSearchHit } from '$lib/types';
 import { imageSrc, type ImageRef } from '$lib/images';
 
 /** Turns free text into a safe FTS5 query: every word must match, last-typed words as prefixes. */
@@ -96,7 +96,6 @@ interface HitRow {
 	category_name: string;
 	category_icon: string;
 	category_slug: string;
-	rating_scale: RatingScale;
 	statuses: string;
 	img_kind: ImageRef['kind'] | null;
 	img_path: string | null;
@@ -107,7 +106,7 @@ interface HitRow {
 const HIT_COLUMNS = `
 	i.id, i.title, i.subtitle, i.status, i.rating,
 	c.name AS category_name, c.icon AS category_icon, c.slug AS category_slug,
-	c.rating_scale, c.statuses,
+	c.statuses,
 	im.kind AS img_kind, im.path AS img_path, im.thumb_path AS img_thumb, im.source_url AS img_source`;
 
 function toHit(r: HitRow): LocalSearchHit {
@@ -127,7 +126,6 @@ function toHit(r: HitRow): LocalSearchHit {
 		categorySlug: r.category_slug,
 		status: statusLabel,
 		rating: r.rating,
-		ratingScale: r.rating_scale,
 		imageUrl: r.img_kind
 			? imageSrc({ kind: r.img_kind, path: r.img_path, thumbPath: r.img_thumb, sourceUrl: r.img_source })
 			: null

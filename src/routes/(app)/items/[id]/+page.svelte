@@ -150,15 +150,13 @@
 				onclick={() => (editingRating = !editingRating)}
 			>
 				{#if item.rating !== null}
-					<Rating value={item.rating} scale={cat.ratingScale} />
+					<Rating value={item.rating} />
 				{:else}
 					<span class="text-muted">Rate it</span>
 				{/if}
 			</button>
 			{#if avgLogRating !== null && data.logs.length > 1}
-				<span class="text-xs text-muted"
-					>avg of logs: <Rating value={avgLogRating} scale={cat.ratingScale} /></span
-				>
+				<span class="text-xs text-muted">avg of logs: <Rating value={avgLogRating} /></span>
 			{/if}
 			<span class="text-sm text-muted">{data.logs.length} {data.logs.length === 1 ? 'log' : 'logs'}</span>
 		</div>
@@ -174,7 +172,7 @@
 						editingRating = false;
 					}}
 			>
-				<RatingInput scale={cat.ratingScale} value={item.rating} label="Your rating" />
+				<RatingInput value={item.rating} label="Your rating" />
 				<button class="btn btn-primary btn-sm">Save rating</button>
 			</form>
 		{/if}
@@ -418,7 +416,6 @@
 							<input type="hidden" name="log_external" value={setlist ? JSON.stringify({ setlist }) : ''} />
 						{/if}
 						<LogFields
-							scale={cat.ratingScale}
 							logFields={data.logFields}
 							dateDefault={data.today}
 							bind:date={logDate}
@@ -455,7 +452,7 @@
 											</p>
 										{/if}
 									</div>
-									<Rating value={log.rating} scale={cat.ratingScale} />
+									<Rating value={log.rating} />
 									<a href="/logs/{log.id}/edit" class="btn btn-ghost btn-sm px-2" aria-label="Edit log"
 										><Icon name="edit" size={14} /></a
 									>

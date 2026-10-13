@@ -5,6 +5,7 @@ import { reindexItem } from '../search/local';
 import { createCategory, createCategoryFromTemplate, listCategories } from '../services/categories';
 import { findExisting } from '../services/provider-items';
 import { TEMPLATE_BY_KEY } from '../templates';
+import { toStored } from '$lib/ratings';
 import type { StatusDef, StatusGroup } from '$lib/types';
 
 // Yamtrack's CSV export: one row per tracked media record, columns by header name
@@ -86,7 +87,7 @@ function scoreToRating(v: string | undefined) {
 	if (!v?.trim()) return null;
 	const n = Number(v);
 	if (!Number.isFinite(n)) return null;
-	return Math.round(Math.min(Math.max(n, 0), 10) * 10);
+	return toStored(n);
 }
 
 function externalUrl(source: string, type: string, id: string): string | null {
@@ -314,7 +315,6 @@ export function applyYamtrackImport(userId: number, plan: ImportPlan) {
 			? createCategoryFromTemplate(userId, template)
 			: createCategory(userId, {
 					...GENERIC[type],
-					ratingScale: '10',
 					statuses: YAMTRACK_STATUSES,
 					providerKinds: []
 				});

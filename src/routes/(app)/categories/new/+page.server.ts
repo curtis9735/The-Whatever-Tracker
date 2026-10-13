@@ -29,7 +29,6 @@ export const actions: Actions = {
 			name,
 			icon,
 			color,
-			ratingScale: '5star',
 			statuses: DEFAULT_STATUSES,
 			providerKinds: []
 		});

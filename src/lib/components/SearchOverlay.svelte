@@ -3,7 +3,7 @@
 	import { tick } from 'svelte';
 	import { KINDS, PROVIDER_LABELS, SETLIST_SOURCE } from '$lib/kinds';
 	import { isFinished } from '$lib/status';
-	import type { LocalSearchHit, NormalizedMetadata, SearchResult, StatusDef, RatingScale } from '$lib/types';
+	import type { LocalSearchHit, NormalizedMetadata, SearchResult, StatusDef } from '$lib/types';
 	import BarcodeScanner from './BarcodeScanner.svelte';
 	import Icon from './Icon.svelte';
 	import Rating from './Rating.svelte';
@@ -14,7 +14,6 @@
 		name: string;
 		slug: string;
 		icon: string;
-		ratingScale: RatingScale;
 		statuses: StatusDef[];
 		providerKinds: string[];
 	}
@@ -377,7 +376,7 @@
 														: ''}
 												</p>
 											</div>
-											<Rating value={h.rating} scale={h.ratingScale} class="text-sm" />
+											<Rating value={h.rating} class="text-sm" />
 										</a>
 									</li>
 								{/each}
@@ -555,7 +554,7 @@
 					{/if}
 					<form bind:this={ratingForm} onsubmit={(e) => e.preventDefault()}>
 						{#key addCategory.id}
-							<RatingInput scale={addCategory.ratingScale} name="rating" id="add-rating" />
+							<RatingInput name="rating" id="add-rating" />
 						{/key}
 					</form>
 				{/if}
