@@ -22,29 +22,7 @@ reverse proxy, and to work well on a phone.
 
 ---
 
-## Deploying on a Synology NAS
-
-The flow: GitHub builds the Docker image → Portainer pulls it onto the NAS → DSM's reverse proxy serves it over
-HTTPS. It takes about 20 minutes the first time.
-
-### 1. The code on GitHub
-
-The code lives at [github.com/curtis9735/The-Whatever-Tracker](https://github.com/curtis9735/The-Whatever-Tracker).
-Every push to `main` triggers the _Test and publish image_ workflow (repo → **Actions** tab). It runs the
-tests, then builds the image for both Intel/AMD and ARM Synology models. The first run takes around 10 minutes.
-
-### 2. Let the NAS pull the image
-
-GitHub stores the image at `ghcr.io/curtis9735/the-whatever-tracker`. Container image names are always
-lowercase. Because the repo is private, the image starts out private too. Pick one:
-
-- **Simplest:** on GitHub open your profile → **Packages** → `the-whatever-tracker` → **Package settings** →
-  **Change visibility → Public**. The image contains only the app, never your data or keys.
-- **Keep it private:** create a classic personal access token with only the `read:packages` scope
-  (GitHub → Settings → Developer settings → Personal access tokens). In Portainer go to **Registries → Add
-  registry → Custom**, with URL `ghcr.io`, your GitHub username, and the token as the password.
-
-### 3. Prepare a folder on the NAS
+### 1. Prepare a folder on the NAS
 
 In **File Station**, create `docker/whatever-tracker` on `volume1`. That's `/volume1/docker/whatever-tracker`,
 and it will hold the database, photos and backups.
@@ -57,7 +35,7 @@ id
 
 You'll see something like `uid=1026(you) gid=100(users)`. Those are `PUID=1026` and `PGID=100`.
 
-### 4. Create the stack in Portainer
+### 2. Create the stack in Portainer
 
 1. **Stacks → Add stack**, name it `whatever-tracker`, and choose **Web editor**.
 2. Paste in the contents of [`docker-compose.yml`](docker-compose.yml).
@@ -71,7 +49,7 @@ You'll see something like `uid=1026(you) gid=100(users)`. Those are `PUID=1026` 
 > address. Switch `ORIGIN` to the HTTPS address once the proxy works, then redeploy. The camera and barcode
 > scanner only work over HTTPS.
 
-### 5. Point a reverse proxy at it
+### 3. Point a reverse proxy at it
 
 **Using DSM's built-in proxy:** go to **Control Panel → Login Portal → Advanced → Reverse Proxy → Create**.
 
@@ -90,7 +68,7 @@ assign it under **Settings**.
 `ORIGIN` must be exactly the address you type in the browser, for example `https://tracker.yourdomain.com` with
 no trailing slash. If it doesn't match, saving forms fails with "Cross-site POST form submissions are forbidden".
 
-### 6. First sign-in
+### 4. First sign-in
 
 Open `https://tracker.yourdomain.com`. The app sends you to **/setup**. Enter the setup code from the logs and
 create your admin account. Then pick your starting lists. To add household members, go to **Household** in the
