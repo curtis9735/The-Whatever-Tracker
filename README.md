@@ -142,8 +142,9 @@ can see which sources are connected, but can't view or change keys.
 | Open Food Facts   | Barcode lookups               | Always on, no key                                                                                                                      | none                                            |
 | Wikimedia, Deezer | Artist photos                 | Always on, no key. Used when adding a MusicBrainz artist                                                                               | none                                            |
 
-Search only asks sources that match one of your lists. For example, TV results appear only if a list has
-"TV show (TMDB)" ticked under **List settings → Metadata sources**.
+Each list says what it holds under **List settings → Fill in details automatically** (Movies, TV shows, Music
+artists…). The search bar only asks sources that one of your lists uses. For example, TV results appear only if a
+list has **TV shows** ticked.
 
 ---
 
@@ -163,9 +164,10 @@ Search only asks sources that match one of your lists. For example, TV results a
   fields. Logging something that was in a "planned" status (wishlist, to watch) moves it to the first "done"
   status automatically.
 - **Concerts:** the item is the artist, and each show you attend is a log. Once setlist.fm is connected
-  (**Me → Integrations**), any list with **Concert setlists (setlist.fm)** ticked under **List settings →
-  Metadata sources → When logging** gets the lookup. The Concerts template has it ticked. To search for artists
-  in the search bar, also connect MusicBrainz, which only needs an email address or URL as contact info.
+  (**Me → Integrations**), any list with **Concert setlists** ticked under **List settings → Fill in details
+  automatically → Extras** gets the lookup. That option appears once the list has **Music artists** ticked, and
+  the Concerts template has both. To search for artists in the search bar, also connect MusicBrainz, which only
+  needs an email address or URL as contact info.
   - **When adding the artist** (from search or the Add form): choose **Seen** and the date of the show. The show
     is saved right away, and if setlist.fm has it, the venue and full setlist come with it. On the rare day with
     more than one show, you're asked to pick yours.
@@ -183,7 +185,7 @@ Search only asks sources that match one of your lists. For example, TV results a
 
 - **Lists:** **Manage lists** lets you rename lists, reorder them, pick an emoji and color, choose a rating scale
   (5 stars with halves, 10 points or 100 points; existing ratings convert automatically), edit the statuses and
-  their groups, choose metadata sources (for search, and setlist.fm for logging), and add or remove fields.
+  their groups, choose what the list holds so details fill in automatically, and add or remove fields.
 - **Yamtrack import:** in Yamtrack, export to CSV, then go to **Me → Import from Yamtrack**. You see a preview
   before anything is saved, and re-importing the same file doesn't create duplicates.
 

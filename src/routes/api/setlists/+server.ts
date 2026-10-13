@@ -13,7 +13,7 @@ export const GET: RequestHandler = async ({ locals, url, request }) => {
 	const item = getOwnedItem(userId, Number(url.searchParams.get('item')));
 	const { category } = getCategoryById(userId, item.categoryId);
 	if (!listUsesSetlists(category)) {
-		error(400, `Turn on “Concert setlists (setlist.fm)” in the ${category.name} list settings first`);
+		error(400, `Turn on “Concert setlists” in the ${category.name} list settings first`);
 	}
 	const sp = url.searchParams;
 	try {

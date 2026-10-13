@@ -4,6 +4,7 @@
 	import Icon from '$lib/components/Icon.svelte';
 	import IconPicker from '$lib/components/IconPicker.svelte';
 	import { FIELD_TYPES } from '$lib/fields';
+	import { PROVIDER_LABELS } from '$lib/kinds';
 	import { SCALES } from '$lib/ratings';
 	import type { StatusGroup } from '$lib/types';
 
@@ -16,10 +17,18 @@
 	// The name as typed, so the icon picker can suggest matching icons
 	// svelte-ignore state_referenced_locally
 	let nameDraft = $state(data.category.name);
+	// Ticked sources (search kinds and logging extras share the providerKinds field)
+	// svelte-ignore state_referenced_locally
+	let picked = $state<string[]>([...data.category.providerKinds]);
 	$effect(() => {
 		statuses = data.category.statuses.map((s) => ({ ...s }));
 		nameDraft = data.category.name;
+		picked = [...data.category.providerKinds];
 	});
+	// Extras only make sense for some lists (setlists for music artists); keep any that are on
+	const extras = $derived(
+		data.logSources.filter((s) => picked.includes(s.key) || s.forKinds.some((k) => picked.includes(k)))
+	);
 	const GROUPS: { value: StatusGroup; label: string }[] = [
 		{ value: 'planned', label: 'Planned (wishlist, to-do)' },
 		{ value: 'active', label: 'Active (in progress, owned)' },
@@ -52,133 +61,133 @@
 	{#if saved}<p class="ok-box">Saved.</p>{/if}
 	{#if form?.message}<p class="error-box">{form.message}</p>{/if}
 
-	<!-- Basics -->
-	<form method="POST" action="?/save" class="card space-y-5 p-4 sm:p-5">
-		<h2 class="font-semibold">Basics</h2>
-		<div class="flex gap-3">
-			<div class="w-20">
-				<label class="label" for="icon">Icon</label>
-				{#key c.id}
-					<IconPicker name="icon" value={c.icon} hint={nameDraft} />
-				{/key}
+	<!-- Basics and lookups save together -->
+	<form method="POST" action="?/save" class="space-y-8">
+		<section class="card space-y-5 p-4 sm:p-5">
+			<h2 class="font-semibold">Basics</h2>
+			<div class="flex gap-3">
+				<div class="w-20">
+					<label class="label" for="icon">Icon</label>
+					{#key c.id}
+						<IconPicker name="icon" value={c.icon} hint={nameDraft} />
+					{/key}
+				</div>
+				<div class="flex-1">
+					<label class="label" for="name">Name</label>
+					<input class="input" id="name" name="name" bind:value={nameDraft} required maxlength="60" />
+				</div>
 			</div>
-			<div class="flex-1">
-				<label class="label" for="name">Name</label>
-				<input class="input" id="name" name="name" bind:value={nameDraft} required maxlength="60" />
+
+			<fieldset>
+				<legend class="label">Color</legend>
+				<div class="flex flex-wrap gap-2">
+					{#each data.colors as [name, hex] (name)}
+						<label class="cursor-pointer">
+							<input type="radio" name="color" value={name} checked={c.color === name} class="peer sr-only" />
+							<span
+								class="block h-8 w-8 rounded-full ring-offset-2 ring-offset-surface peer-checked:ring-2 peer-checked:ring-fg peer-focus-visible:ring-2 peer-focus-visible:ring-accent"
+								style="background: {hex}"
+								title={name}
+							></span>
+						</label>
+					{/each}
+				</div>
+			</fieldset>
+
+			<div>
+				<label class="label" for="ratingScale">Rating scale</label>
+				<select class="input sm:w-64" id="ratingScale" name="ratingScale">
+					{#each Object.entries(SCALES) as [key, s] (key)}
+						<option value={key} selected={c.ratingScale === key}>{s.label}</option>
+					{/each}
+				</select>
+				<p class="hint">Existing ratings convert automatically.</p>
 			</div>
-		</div>
 
-		<fieldset>
-			<legend class="label">Color</legend>
-			<div class="flex flex-wrap gap-2">
-				{#each data.colors as [name, hex] (name)}
-					<label class="cursor-pointer">
-						<input type="radio" name="color" value={name} checked={c.color === name} class="peer sr-only" />
-						<span
-							class="block h-8 w-8 rounded-full ring-offset-2 ring-offset-surface peer-checked:ring-2 peer-checked:ring-fg peer-focus-visible:ring-2 peer-focus-visible:ring-accent"
-							style="background: {hex}"
-							title={name}
-						></span>
-					</label>
-				{/each}
+			<fieldset>
+				<legend class="label">Statuses</legend>
+				<p class="hint mb-3 mt-0">
+					The group decides what counts as “up next” and what a new log marks as done.
+				</p>
+				<div class="space-y-2">
+					{#each statuses as s, i (i)}
+						<div class="flex flex-wrap gap-2 sm:flex-nowrap">
+							<input
+								class="input min-w-0 flex-1"
+								bind:value={s.label}
+								aria-label="Status name"
+								maxlength="60"
+							/>
+							<select class="input w-auto flex-1 sm:flex-none" bind:value={s.group} aria-label="Status group">
+								{#each GROUPS as g (g.value)}<option value={g.value}>{g.label}</option>{/each}
+							</select>
+							<button
+								type="button"
+								class="btn btn-ghost btn-icon"
+								disabled={statuses.length <= 1}
+								onclick={() => statuses.splice(i, 1)}
+								aria-label="Remove status {s.label}"
+							>
+								<Icon name="x" size={18} />
+							</button>
+						</div>
+					{/each}
+				</div>
+				<button
+					type="button"
+					class="btn btn-sm mt-2"
+					onclick={() => statuses.push({ key: '', label: '', group: 'active' })}
+				>
+					<Icon name="plus" size={14} /> Add status
+				</button>
+				<input
+					type="hidden"
+					name="statuses_json"
+					value={JSON.stringify(statuses.filter((s) => s.label.trim()))}
+				/>
+			</fieldset>
+		</section>
+
+		<!-- What the list holds decides where new entries are looked up -->
+		<section class="card space-y-4 p-4 sm:p-5">
+			<div>
+				<h2 class="font-semibold">Fill in details automatically</h2>
+				<p class="mt-1 text-sm text-muted">
+					Pick what {nameDraft || 'this list'} holds. When you add something, it's looked up online so the picture
+					and details fill themselves in, and the search bar suggests matches for this list.
+				</p>
 			</div>
-		</fieldset>
 
-		<div>
-			<label class="label" for="ratingScale">Rating scale</label>
-			<select class="input sm:w-64" id="ratingScale" name="ratingScale">
-				{#each Object.entries(SCALES) as [key, s] (key)}
-					<option value={key} selected={c.ratingScale === key}>{s.label}</option>
-				{/each}
-			</select>
-			<p class="hint">Existing ratings convert automatically.</p>
-		</div>
+			<fieldset>
+				<legend class="sr-only">What this list holds</legend>
+				<div class="grid gap-2 sm:grid-cols-2">
+					{#each data.kinds as k (k.key)}
+						{@render choice(k.key, k.icon, k.label, k.provider, k.gives, k.enabled)}
+					{/each}
+				</div>
+				<p class="hint">
+					{#if picked.some((k) => data.kinds.some((x) => x.key === k))}
+						Tick more than one for a mixed list, like movies and TV shows together.
+					{:else}
+						Nothing ticked: you fill in the details yourself. That's right for things like whiskey, cheese or
+						cats.
+					{/if}
+				</p>
+			</fieldset>
 
-		<fieldset>
-			<legend class="label">Statuses</legend>
-			<p class="hint mb-3 mt-0">
-				The group decides what counts as “up next” and what a new log marks as done.
-			</p>
-			<div class="space-y-2">
-				{#each statuses as s, i (i)}
-					<div class="flex flex-wrap gap-2 sm:flex-nowrap">
-						<input
-							class="input min-w-0 flex-1"
-							bind:value={s.label}
-							aria-label="Status name"
-							maxlength="60"
-						/>
-						<select class="input w-auto flex-1 sm:flex-none" bind:value={s.group} aria-label="Status group">
-							{#each GROUPS as g (g.value)}<option value={g.value}>{g.label}</option>{/each}
-						</select>
-						<button
-							type="button"
-							class="btn btn-ghost btn-icon"
-							disabled={statuses.length <= 1}
-							onclick={() => statuses.splice(i, 1)}
-							aria-label="Remove status {s.label}"
-						>
-							<Icon name="x" size={18} />
-						</button>
+			{#if extras.length}
+				<fieldset>
+					<legend class="section-title mb-2">Extras</legend>
+					<div class="grid gap-2 sm:grid-cols-2">
+						{#each extras as s (s.key)}
+							{@render choice(s.key, '🎟️', s.label, s.provider, s.gives, s.enabled)}
+						{/each}
 					</div>
-				{/each}
-			</div>
-			<button
-				type="button"
-				class="btn btn-sm mt-2"
-				onclick={() => statuses.push({ key: '', label: '', group: 'active' })}
-			>
-				<Icon name="plus" size={14} /> Add status
-			</button>
-			<input
-				type="hidden"
-				name="statuses_json"
-				value={JSON.stringify(statuses.filter((s) => s.label.trim()))}
-			/>
-		</fieldset>
+				</fieldset>
+			{/if}
 
-		<fieldset>
-			<legend class="label">Metadata sources</legend>
-			<p class="section-title mt-1 mb-2">In search</p>
-			<p class="hint mt-0 mb-3">Search results of these kinds are suggested for this list.</p>
-			<div class="grid gap-2 sm:grid-cols-2">
-				{#each data.kinds as k (k.key)}
-					<label class="flex items-center gap-2 text-sm">
-						<input
-							type="checkbox"
-							name="providerKinds"
-							value={k.key}
-							checked={c.providerKinds.includes(k.key)}
-							class="h-4 w-4 accent-[var(--accent)]"
-						/>
-						{k.label}
-						{#if !k.enabled}{@render notConnected()}{/if}
-					</label>
-				{/each}
-			</div>
-
-			<p class="section-title mt-5 mb-2">When logging</p>
-			<div class="grid gap-2">
-				{#each data.logSources as s (s.key)}
-					<label class="flex items-start gap-2 text-sm">
-						<input
-							type="checkbox"
-							name="providerKinds"
-							value={s.key}
-							checked={c.providerKinds.includes(s.key)}
-							class="mt-0.5 h-4 w-4 accent-[var(--accent)]"
-						/>
-						<span>
-							{s.label}
-							{#if !s.enabled}{@render notConnected()}{/if}
-							<span class="block text-xs text-muted">{s.hint}</span>
-						</span>
-					</label>
-				{/each}
-			</div>
-		</fieldset>
-
-		<button class="btn btn-primary">Save settings</button>
+			<button class="btn btn-primary">Save settings</button>
+		</section>
 	</form>
 
 	<!-- Fields -->
@@ -342,8 +351,30 @@
 	</section>
 </div>
 
-{#snippet notConnected()}
-	<a class="badge hover:text-fg" href="/settings#integrations" title="Connect it under Me → Integrations">
-		not connected
-	</a>
+{#snippet choice(key: string, icon: string, label: string, provider: string, gives: string, enabled: boolean)}
+	<label
+		class="flex cursor-pointer items-start gap-3 rounded-xl border border-border p-3 hover:bg-surface-2 has-[:checked]:border-accent has-[:checked]:bg-accent-soft"
+	>
+		<input
+			type="checkbox"
+			name="providerKinds"
+			value={key}
+			bind:group={picked}
+			class="mt-1 h-4 w-4 shrink-0 accent-[var(--accent)]"
+		/>
+		<span class="text-xl leading-none" aria-hidden="true">{icon}</span>
+		<span class="min-w-0 flex-1">
+			<span class="block text-sm font-medium">{label}</span>
+			<span class="block text-xs text-muted">{gives}</span>
+			<span class="mt-1 block text-xs">
+				<span class="text-muted">from {PROVIDER_LABELS[provider]}</span>
+				{#if !enabled}
+					·
+					<a class="text-accent underline" href="/settings#integrations">
+						{page.data.user?.isAdmin ? `set up ${PROVIDER_LABELS[provider]} first` : 'not set up yet'}
+					</a>
+				{/if}
+			</span>
+		</span>
+	</label>
 {/snippet}

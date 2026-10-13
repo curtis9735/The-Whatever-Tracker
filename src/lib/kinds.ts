@@ -3,34 +3,68 @@
 export interface KindInfo {
 	key: string;
 	provider: string;
+	/** What a list holding these is about, as shown in List settings */
 	label: string;
+	icon: string;
+	/** What looking it up fills in */
+	gives: string;
 	/** Search result group title */
 	group: string;
 	order: number;
 }
 
 export const KINDS: KindInfo[] = [
-	{ key: 'tmdb:movie', provider: 'tmdb', label: 'Movie (TMDB)', group: 'Movies', order: 1 },
-	{ key: 'tmdb:tv', provider: 'tmdb', label: 'TV show (TMDB)', group: 'TV Shows', order: 2 },
-	{ key: 'igdb:game', provider: 'igdb', label: 'Video game (IGDB)', group: 'Video Games', order: 3 },
+	{
+		key: 'tmdb:movie',
+		provider: 'tmdb',
+		label: 'Movies',
+		icon: '🎬',
+		gives: 'Poster, release date, runtime, director and cast',
+		group: 'Movies',
+		order: 1
+	},
+	{
+		key: 'tmdb:tv',
+		provider: 'tmdb',
+		label: 'TV shows',
+		icon: '📺',
+		gives: 'Poster, seasons, network and cast',
+		group: 'TV Shows',
+		order: 2
+	},
+	{
+		key: 'igdb:game',
+		provider: 'igdb',
+		label: 'Video games',
+		icon: '🎮',
+		gives: 'Cover, platforms, developer and release date',
+		group: 'Video Games',
+		order: 3
+	},
 	{
 		key: 'bgg:boardgame',
 		provider: 'bgg',
-		label: 'Board game (BoardGameGeek)',
+		label: 'Board games',
+		icon: '🎲',
+		gives: 'Box art, player count, play time and designer',
 		group: 'Board Games',
 		order: 4
 	},
 	{
 		key: 'musicbrainz:artist',
 		provider: 'musicbrainz',
-		label: 'Artist (MusicBrainz)',
+		label: 'Music artists',
+		icon: '🎤',
+		gives: 'Photo, where they’re from, genres and website',
 		group: 'Artists',
 		order: 5
 	},
 	{
 		key: 'musicbrainz:album',
 		provider: 'musicbrainz',
-		label: 'Album (MusicBrainz)',
+		label: 'Albums',
+		icon: '💿',
+		gives: 'Cover art, artist and release date',
 		group: 'Albums',
 		order: 6
 	}
@@ -46,8 +80,10 @@ export const LOG_SOURCES = [
 	{
 		key: 'setlistfm:setlist',
 		provider: 'setlistfm',
-		label: 'Concert setlists (setlist.fm)',
-		hint: 'Find the show (venue, date, songs) when you log one'
+		label: 'Concert setlists',
+		gives: 'Each show you log gets its venue, tour and songs, found by artist and date',
+		/** Offered for lists of these (or already turned on) */
+		forKinds: ['musicbrainz:artist']
 	}
 ] as const;
 
