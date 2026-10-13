@@ -16,6 +16,8 @@ reverse proxy, and to work well on a phone.
 - **Barcode scanning.** Scan a bottle or a sauce. If you already have it, you jump straight to it. Otherwise
   Open Food Facts fills in the name and photo.
 - **Household accounts.** Everyone gets private lists, ratings and photos.
+- **Spreadsheet import.** Paste a table from Excel, Google Sheets or Numbers (or upload a CSV) and check it in a
+  preview before anything is saved.
 - **Yamtrack import**, nightly database snapshots, and JSON export.
 
 ---
@@ -186,6 +188,25 @@ list has **TV shows** ticked.
 - **Lists:** **Manage lists** lets you rename lists, reorder them, pick an emoji and color, choose a rating scale
   (5 stars with halves, 10 points or 100 points; existing ratings convert automatically), edit the statuses and
   their groups, choose what the list holds so details fill in automatically, and add or remove fields.
+- **Spreadsheet import:** to bring in a table you already keep (a whiskey spreadsheet, say), open the list and
+  tap the upload icon beside the settings gear (or **Me → Your data**, then pick the list). Select the cells in
+  your spreadsheet **including the header row**, copy, and paste them in, or choose a CSV file. Only include the
+  columns you want.
+  - **Each column is matched to where it goes**, guessed from its header: the name, the list's own fields (a
+    "Cost" column fills a Price field), status, rating, notes, tags, a photo link, or **Skip**. A column the
+    list has no field for can become a new field (text, number, date, yes/no or link). Change any guess in the
+    dropdown above the column.
+  - **Ratings** like `2.5/5`, `8 out of 10`, `90%` or `★★★½` are converted to the list's rating scale. Text
+    after the rating (`4.5/5  Really smooth`) goes into the item's notes.
+  - **Status:** you say what each value means. By default a ✓ (or yes, x…) becomes the list's "done" status,
+    like Tasted, Seen or Completed, and a blank cell becomes the first planned one, like Wishlist.
+  - **Dates:** add a Date column and each row also gets a dated log, with Where, notes and the list's log fields
+    (nose, palate…) if you map them.
+  - **The preview** shows what every row will become, marks cells it couldn't use in red, and lets you untick
+    rows. Nothing is saved until you press **Import**.
+  - **Safe to repeat:** items are matched by name (ignoring case and punctuation), so importing an updated
+    sheet updates what's there instead of duplicating it. Empty cells never erase anything, a blank status
+    cell never downgrades an item, and the same date is never logged twice.
 - **Yamtrack import:** in Yamtrack, export to CSV, then go to **Me → Import from Yamtrack**. You see a preview
   before anything is saved, and re-importing the same file doesn't create duplicates.
 

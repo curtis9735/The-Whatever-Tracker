@@ -120,6 +120,18 @@
 				><Icon name="download" size={16} /> Export as JSON</a
 			>
 		</div>
+		{#if data.categories.length}
+			<div class="mt-4">
+				<p class="mb-2 text-sm text-muted">
+					Or paste or upload a spreadsheet (like a table of whiskeys or movies) into a list:
+				</p>
+				<div class="flex flex-wrap gap-2">
+					{#each data.categories as c (c.id)}
+						<a class="chip" href="/c/{c.slug}/import"><span>{c.icon}</span>{c.name}</a>
+					{/each}
+				</div>
+			</div>
+		{/if}
 	</section>
 
 	{#if data.user.isAdmin}

@@ -1,8 +1,9 @@
 import { fail, redirect } from '@sveltejs/kit';
-import { and, eq, max } from 'drizzle-orm';
+import { and, eq } from 'drizzle-orm';
 import { z } from 'zod';
 import { db, schema } from '$lib/server/db';
 import {
+	addFieldDefinition,
 	categoryItemCount,
 	deleteCategory,
 	getCategoryBySlug,
@@ -14,7 +15,7 @@ import { enabledKinds } from '$lib/server/providers/registry';
 import { setlistfmEnabled } from '$lib/server/providers/setlistfm';
 import { CATEGORY_COLORS, KINDS, LOG_SOURCES } from '$lib/kinds';
 import { cleanIcon } from '$lib/icons';
-import { FIELD_TYPES, fieldKey, slugify } from '$lib/fields';
+import { FIELD_TYPES, slugify } from '$lib/fields';
 import type { FieldType, RatingScale } from '$lib/types';
 import type { Actions, PageServerLoad } from './$types';
 
@@ -127,35 +128,17 @@ export const actions: Actions = {
 		if ((type === 'select' || type === 'multiselect') && !options.length) {
 			return fail(400, { fieldMessage: 'List the choices, separated by commas.' });
 		}
-		const existing = new Set(
-			getFields(category.id)
-				.filter((f) => f.scope === scope)
-				.map((f) => f.key)
-		);
-		let key = fieldKey(label);
-		for (let i = 2; existing.has(key); i++) key = `${fieldKey(label)}_${i}`;
-		const order = db()
-			.select({ m: max(schema.fieldDefinitions.sortOrder) })
-			.from(schema.fieldDefinitions)
-			.where(eq(schema.fieldDefinitions.categoryId, category.id))
-			.get();
-		db()
-			.insert(schema.fieldDefinitions)
-			.values({
-				categoryId: category.id,
-				scope,
-				key,
-				label,
-				type,
-				options,
-				unit:
-					String(form.get('unit') ?? '')
-						.trim()
-						.slice(0, 20) || null,
-				showOnCard: form.get('showOnCard') === 'on',
-				sortOrder: (order?.m ?? -1) + 1
-			})
-			.run();
+		addFieldDefinition(category.id, {
+			label,
+			type,
+			scope,
+			options,
+			unit:
+				String(form.get('unit') ?? '')
+					.trim()
+					.slice(0, 20) || null,
+			showOnCard: form.get('showOnCard') === 'on'
+		});
 		return { fieldAdded: true };
 	},
 

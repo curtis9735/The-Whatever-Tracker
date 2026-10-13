@@ -2,8 +2,8 @@ import { and, asc, count, eq, max, sql } from 'drizzle-orm';
 import { error } from '@sveltejs/kit';
 import { db, schema } from '../db';
 import { TEMPLATE_BY_KEY, DEFAULT_STATUSES, type CategoryTemplate } from '../templates';
-import { slugify } from '$lib/fields';
-import type { FieldDef, RatingScale, StatusDef } from '$lib/types';
+import { fieldKey, slugify } from '$lib/fields';
+import type { FieldDef, FieldScope, FieldType, RatingScale, StatusDef } from '$lib/types';
 import type { Category, FieldDefinition } from '../db/schema';
 
 export function listCategories(userId: number) {
@@ -131,6 +131,70 @@ export function createCategory(userId: number, input: CategoryInput, templateKey
 		.returning()
 		.get();
 	return row;
+}
+
+export interface FieldInput {
+	label: string;
+	type: FieldType;
+	scope: FieldScope;
+	options?: string[];
+	unit?: string | null;
+	showOnCard?: boolean;
+	/** Preferred key; a number is added if the list already uses it */
+	key?: string;
+}
+
+/** Adds a field to a list: unique key within its scope, placed after the existing fields. */
+export function addFieldDefinition(categoryId: number, input: FieldInput) {
+	const taken = new Set(
+		getFields(categoryId)
+			.filter((f) => f.scope === input.scope)
+			.map((f) => f.key)
+	);
+	const base = input.key ?? fieldKey(input.label);
+	let key = base;
+	for (let i = 2; taken.has(key); i++) key = `${base}_${i}`;
+	const order = db()
+		.select({ m: max(schema.fieldDefinitions.sortOrder) })
+		.from(schema.fieldDefinitions)
+		.where(eq(schema.fieldDefinitions.categoryId, categoryId))
+		.get();
+	return db()
+		.insert(schema.fieldDefinitions)
+		.values({
+			categoryId,
+			scope: input.scope,
+			key,
+			label: input.label,
+			type: input.type,
+			options: input.options ?? [],
+			unit: input.unit ?? null,
+			showOnCard: input.showOnCard ?? false,
+			sortOrder: (order?.m ?? -1) + 1
+		})
+		.returning()
+		.get();
+}
+
+/** Adds choices to a pick-one / pick-several item field (keeps the ones it has; at most 100). */
+export function addSelectOptions(categoryId: number, key: string, values: string[]) {
+	const field = db()
+		.select()
+		.from(schema.fieldDefinitions)
+		.where(
+			and(
+				eq(schema.fieldDefinitions.categoryId, categoryId),
+				eq(schema.fieldDefinitions.key, key),
+				eq(schema.fieldDefinitions.scope, 'item')
+			)
+		)
+		.get();
+	if (!field || (field.type !== 'select' && field.type !== 'multiselect')) return;
+	const have = new Set((field.options ?? []).map((o) => o.toLowerCase()));
+	const added = values.filter((v) => !have.has(v.toLowerCase()));
+	if (!added.length) return;
+	const options = [...new Set([...(field.options ?? []), ...added])].slice(0, 100);
+	db().update(schema.fieldDefinitions).set({ options }).where(eq(schema.fieldDefinitions.id, field.id)).run();
 }
 
 export function createCategoryFromTemplate(userId: number, templateKey: string) {

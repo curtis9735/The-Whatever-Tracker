@@ -38,6 +38,14 @@
 		<p class="text-sm text-muted">{data.total} {data.total === 1 ? 'item' : 'items'}</p>
 	</div>
 	<a
+		href="/c/{c.slug}/import"
+		class="btn btn-ghost btn-icon"
+		aria-label="Import a spreadsheet"
+		title="Import a spreadsheet"
+	>
+		<Icon name="upload" />
+	</a>
+	<a
 		href="/categories/{c.slug}/edit"
 		class="btn btn-ghost btn-icon"
 		aria-label="Edit list settings"
@@ -162,7 +170,15 @@
 				? `No ${c.name.toLowerCase()} yet.`
 				: 'Nothing matches these filters.'}
 		</p>
-		<a class="btn btn-primary" href="/items/new?category={c.slug}"><Icon name="plus" size={18} /> Add one</a>
+		<div class="flex flex-wrap justify-center gap-2">
+			<a class="btn btn-primary" href="/items/new?category={c.slug}"><Icon name="plus" size={18} /> Add one</a
+			>
+			{#if data.total === 0 && !activeFilters && !f.status}
+				<a class="btn" href="/c/{c.slug}/import"
+					><Icon name="upload" size={16} /> Have a spreadsheet? Import it</a
+				>
+			{/if}
+		</div>
 	</div>
 {:else if data.view === 'grid'}
 	<div class="grid grid-cols-2 gap-x-3 gap-y-5 sm:grid-cols-3 md:grid-cols-4 lg:grid-cols-5 xl:grid-cols-6">
