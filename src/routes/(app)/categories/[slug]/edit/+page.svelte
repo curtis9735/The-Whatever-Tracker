@@ -26,9 +26,12 @@
 		picked = [...data.category.providerKinds];
 	});
 	// Extras only make sense for some lists (setlists for music artists); keep any that are on
-	const extras = $derived(
-		data.logSources.filter((s) => picked.includes(s.key) || s.forKinds.some((k) => picked.includes(k)))
-	);
+	const extras = $derived(data.logSources.filter((s) => s.forKinds.some((k) => picked.includes(k))));
+	// An extra can't stay on once the kind it belongs to is unticked
+	$effect(() => {
+		const stale = data.logSources.filter((s) => picked.includes(s.key) && !extras.includes(s));
+		if (stale.length) picked = picked.filter((k) => !stale.some((s) => s.key === k));
+	});
 	const GROUPS: { value: StatusGroup; label: string }[] = [
 		{ value: 'planned', label: 'Planned (wishlist, to-do)' },
 		{ value: 'active', label: 'Active (in progress, owned)' },

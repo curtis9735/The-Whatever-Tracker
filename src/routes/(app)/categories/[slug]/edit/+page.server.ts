@@ -94,6 +94,13 @@ export const actions: Actions = {
 			.getAll('providerKinds')
 			.map(String)
 			.filter((k) => validKinds.has(k));
+		// Extras (setlists…) only go with the kind of list they belong to
+		for (const s of LOG_SOURCES) {
+			if (!s.forKinds.some((k) => providerKinds.includes(k))) {
+				const i = providerKinds.indexOf(s.key);
+				if (i !== -1) providerKinds.splice(i, 1);
+			}
+		}
 
 		const slug = updateCategory(userId, category.id, {
 			name,
