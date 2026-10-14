@@ -175,6 +175,68 @@ export function addFieldDefinition(categoryId: number, input: FieldInput) {
 		.get();
 }
 
+export interface FieldChange {
+	/** null for a field added on the settings page */
+	id: number | null;
+	scope: FieldScope;
+	/** Only used for new fields; an existing field keeps its type */
+	type: FieldType;
+	label: string;
+	unit: string | null;
+	options: string[];
+	showOnCard: boolean;
+	removed: boolean;
+}
+
+/**
+ * Applies the field list from the settings page in one go: renames, choices, cards, removals,
+ * new fields, and their order (the order of `changes`). Fields the page didn't send keep their
+ * place after the others. A removed field's values stay in the items, so re-adding a field with
+ * the same name brings them back.
+ */
+export function saveFieldChanges(categoryId: number, changes: FieldChange[]) {
+	const left = new Map(getFields(categoryId).map((f) => [f.id, f]));
+	const order: number[] = [];
+	for (const c of changes) {
+		if (c.id === null) {
+			if (c.removed) continue;
+			const row = addFieldDefinition(categoryId, {
+				label: c.label,
+				type: c.type,
+				scope: c.scope,
+				options: c.options,
+				unit: c.unit,
+				showOnCard: c.showOnCard
+			});
+			order.push(row.id);
+			continue;
+		}
+		const current = left.get(c.id);
+		if (!current) continue; // not this list's field
+		left.delete(c.id);
+		if (c.removed) {
+			db().delete(schema.fieldDefinitions).where(eq(schema.fieldDefinitions.id, c.id)).run();
+			continue;
+		}
+		const picks = current.type === 'select' || current.type === 'multiselect';
+		db()
+			.update(schema.fieldDefinitions)
+			.set({
+				label: c.label,
+				unit: c.unit,
+				options: picks ? c.options : current.options,
+				showOnCard: c.showOnCard
+			})
+			.where(eq(schema.fieldDefinitions.id, c.id))
+			.run();
+		order.push(c.id);
+	}
+	for (const f of left.values()) order.push(f.id);
+	order.forEach((id, i) =>
+		db().update(schema.fieldDefinitions).set({ sortOrder: i }).where(eq(schema.fieldDefinitions.id, id)).run()
+	);
+}
+
 /** Adds choices to a pick-one / pick-several item field (keeps the ones it has; at most 100). */
 export function addSelectOptions(categoryId: number, key: string, values: string[]) {
 	const field = db()

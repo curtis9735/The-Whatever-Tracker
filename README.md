@@ -202,7 +202,9 @@ list has **TV shows** ticked.
   half steps and no per-list scale, so ratings compare across lists. Tap a number to rate, tap **Clear** to
   remove it.
 - **Lists:** **Manage lists** lets you rename lists, reorder them, pick an emoji and color, edit the statuses
-  and their groups, choose what the list holds so details fill in automatically, and add or remove fields.
+  and their groups, choose what the list holds so details fill in automatically, and add, rename, reorder or
+  remove fields. Changes on a list's settings page are kept until you press **Save settings** in the bar
+  pinned to the bottom of the screen, and the page warns you before you leave with unsaved changes.
 - **Up next** on the home page shows items in a planned status (Wishlist, Want to see…). To keep a long wish
   list off the home page, untick **Show in Up next on the home page** in that list's settings. Its items stay
   in the list, and favorites from it still appear under Favorites.

@@ -1,14 +1,14 @@
 import { fail, redirect } from '@sveltejs/kit';
-import { and, eq } from 'drizzle-orm';
+import { eq } from 'drizzle-orm';
 import { z } from 'zod';
 import { db, schema } from '$lib/server/db';
 import {
-	addFieldDefinition,
 	categoryItemCount,
 	deleteCategory,
 	getCategoryBySlug,
-	getFields,
-	updateCategory
+	saveFieldChanges,
+	updateCategory,
+	type FieldChange
 } from '$lib/server/services/categories';
 import { deleteItem } from '$lib/server/services/items';
 import { enabledKinds } from '$lib/server/providers/registry';
@@ -30,7 +30,20 @@ const StatusList = z
 	.min(1, 'Keep at least one status.')
 	.max(20);
 
-const FIELD_TYPE_SET = new Set(FIELD_TYPES.map((t) => t.value));
+const FieldList = z
+	.array(
+		z.object({
+			id: z.number().int().positive().nullable(),
+			scope: z.enum(['item', 'log']),
+			type: z.enum(FIELD_TYPES.map((t) => t.value) as [FieldType, ...FieldType[]]),
+			label: z.string().max(60),
+			unit: z.string().max(20),
+			options: z.string().max(20000),
+			showOnCard: z.boolean(),
+			removed: z.boolean()
+		})
+	)
+	.max(200);
 
 export const load: PageServerLoad = async ({ locals, params, url }) => {
 	const cat = getCategoryBySlug(locals.user!.id, params.slug);
@@ -49,7 +62,7 @@ function ownedCategory(userId: number, slug: string) {
 	return getCategoryBySlug(userId, slug).category;
 }
 
-function parseOptions(raw: FormDataEntryValue | null) {
+function parseOptions(raw: string) {
 	return Array.from(
 		new Set(
 			String(raw ?? '')
@@ -101,97 +114,42 @@ export const actions: Actions = {
 			}
 		}
 
-		const slug = updateCategory(userId, category.id, {
-			name,
-			icon: cleanIcon(form.get('icon')),
-			color: color in CATEGORY_COLORS ? color : 'slate',
-			statuses,
-			providerKinds,
-			showUpNext: form.get('showUpNext') === 'on'
+		// Fields: renamed, reordered, added or removed on the page, all saved here
+		let fieldsRaw: unknown;
+		try {
+			fieldsRaw = JSON.parse(String(form.get('fields_json') ?? '[]'));
+		} catch {
+			return fail(400, { message: 'The fields could not be read. Reload the page and try again.' });
+		}
+		const fieldList = FieldList.safeParse(fieldsRaw);
+		if (!fieldList.success) {
+			return fail(400, { message: 'The fields could not be read. Reload the page and try again.' });
+		}
+		const fields: FieldChange[] = [];
+		for (const f of fieldList.data) {
+			const label = f.label.trim();
+			const options = parseOptions(f.options);
+			if (!f.removed && !label) return fail(400, { message: 'Every field needs a name.' });
+			const picks = f.type === 'select' || f.type === 'multiselect';
+			if (!f.removed && f.id === null && picks && !options.length) {
+				return fail(400, { message: `List the choices for “${label}”, separated by commas.` });
+			}
+			fields.push({ ...f, label, unit: f.unit.trim() || null, options });
+		}
+
+		const slug = db().transaction(() => {
+			const s = updateCategory(userId, category.id, {
+				name,
+				icon: cleanIcon(form.get('icon')),
+				color: color in CATEGORY_COLORS ? color : 'slate',
+				statuses,
+				providerKinds,
+				showUpNext: form.get('showUpNext') === 'on'
+			});
+			saveFieldChanges(category.id, fields);
+			return s;
 		});
 		redirect(303, `/categories/${slug}/edit?saved=1`);
-	},
-
-	addField: async ({ request, locals, params }) => {
-		const category = ownedCategory(locals.user!.id, params.slug);
-		const form = await request.formData();
-		const label = String(form.get('label') ?? '')
-			.trim()
-			.slice(0, 60);
-		const type = String(form.get('type')) as FieldType;
-		const scope = form.get('scope') === 'log' ? 'log' : 'item';
-		if (!label) return fail(400, { fieldMessage: 'Give the field a name.' });
-		if (!FIELD_TYPE_SET.has(type)) return fail(400, { fieldMessage: 'Pick a field type.' });
-		const options = parseOptions(form.get('options'));
-		if ((type === 'select' || type === 'multiselect') && !options.length) {
-			return fail(400, { fieldMessage: 'List the choices, separated by commas.' });
-		}
-		addFieldDefinition(category.id, {
-			label,
-			type,
-			scope,
-			options,
-			unit:
-				String(form.get('unit') ?? '')
-					.trim()
-					.slice(0, 20) || null,
-			showOnCard: form.get('showOnCard') === 'on'
-		});
-		return { fieldAdded: true };
-	},
-
-	updateField: async ({ request, locals, params }) => {
-		const category = ownedCategory(locals.user!.id, params.slug);
-		const form = await request.formData();
-		const id = Number(form.get('id'));
-		const label = String(form.get('label') ?? '')
-			.trim()
-			.slice(0, 60);
-		if (!label) return fail(400, { fieldMessage: 'Fields need a name.' });
-		db()
-			.update(schema.fieldDefinitions)
-			.set({
-				label,
-				options: parseOptions(form.get('options')),
-				unit:
-					String(form.get('unit') ?? '')
-						.trim()
-						.slice(0, 20) || null,
-				showOnCard: form.get('showOnCard') === 'on'
-			})
-			.where(and(eq(schema.fieldDefinitions.id, id), eq(schema.fieldDefinitions.categoryId, category.id)))
-			.run();
-		return { fieldSaved: id };
-	},
-
-	moveField: async ({ request, locals, params }) => {
-		const category = ownedCategory(locals.user!.id, params.slug);
-		const form = await request.formData();
-		const id = Number(form.get('id'));
-		const fields = getFields(category.id);
-		const idx = fields.findIndex((f) => f.id === id);
-		const swap = idx + (form.get('dir') === 'up' ? -1 : 1);
-		if (idx < 0 || swap < 0 || swap >= fields.length) return;
-		[fields[idx], fields[swap]] = [fields[swap], fields[idx]];
-		db().transaction(() => {
-			fields.forEach((f, i) =>
-				db()
-					.update(schema.fieldDefinitions)
-					.set({ sortOrder: i })
-					.where(eq(schema.fieldDefinitions.id, f.id))
-					.run()
-			);
-		});
-	},
-
-	deleteField: async ({ request, locals, params }) => {
-		const category = ownedCategory(locals.user!.id, params.slug);
-		const id = Number((await request.formData()).get('id'));
-		// Values stay in the items' data, so re-adding a field with the same name brings them back
-		db()
-			.delete(schema.fieldDefinitions)
-			.where(and(eq(schema.fieldDefinitions.id, id), eq(schema.fieldDefinitions.categoryId, category.id)))
-			.run();
 	},
 
 	delete: async ({ request, locals, params }) => {

@@ -1,16 +1,43 @@
 <script lang="ts">
+	import { tick } from 'svelte';
 	import { enhance } from '$app/forms';
+	import { beforeNavigate } from '$app/navigation';
 	import { page } from '$app/state';
 	import Icon from '$lib/components/Icon.svelte';
 	import IconPicker from '$lib/components/IconPicker.svelte';
 	import { FIELD_TYPES } from '$lib/fields';
 	import { PROVIDER_LABELS } from '$lib/kinds';
-	import type { StatusGroup } from '$lib/types';
+	import type { FieldScope, FieldType, StatusGroup } from '$lib/types';
 
 	let { data, form } = $props();
 	const c = $derived(data.category);
 
-	// Editable status list (serialized into a hidden input on save); reset whenever the page data changes
+	// Everything on this page is one form with one Save button. Statuses, sources and fields are
+	// kept here until then, and reset whenever the saved data changes.
+	interface FieldDraft {
+		uid: string;
+		id: number | null;
+		scope: FieldScope;
+		type: FieldType;
+		label: string;
+		unit: string;
+		options: string;
+		showOnCard: boolean;
+		removed: boolean;
+	}
+	const draftsFrom = (rows: typeof data.fieldRows): FieldDraft[] =>
+		rows.map((f) => ({
+			uid: `f${f.id}`,
+			id: f.id,
+			scope: f.scope,
+			type: f.type,
+			label: f.label,
+			unit: f.unit ?? '',
+			options: (f.options ?? []).join(', '),
+			showOnCard: f.showOnCard,
+			removed: false
+		}));
+
 	// svelte-ignore state_referenced_locally
 	let statuses = $state(data.category.statuses.map((s) => ({ ...s })));
 	// The name as typed, so the icon picker can suggest matching icons
@@ -19,11 +46,23 @@
 	// Ticked sources (search kinds and logging extras share the providerKinds field)
 	// svelte-ignore state_referenced_locally
 	let picked = $state<string[]>([...data.category.providerKinds]);
+	// svelte-ignore state_referenced_locally
+	let fields = $state<FieldDraft[]>(draftsFrom(data.fieldRows));
+	// Bound, not plain checked={…}: a plain attribute is re-applied whenever anything else on the
+	// page changes (adding a field, say), which would quietly undo the user's click
+	// svelte-ignore state_referenced_locally
+	let color = $state(data.category.color);
+	// svelte-ignore state_referenced_locally
+	let showUpNext = $state(data.category.showUpNext);
 	$effect(() => {
 		statuses = data.category.statuses.map((s) => ({ ...s }));
 		nameDraft = data.category.name;
 		picked = [...data.category.providerKinds];
+		fields = draftsFrom(data.fieldRows);
+		color = data.category.color;
+		showUpNext = data.category.showUpNext;
 	});
+
 	// Extras only make sense for some lists (setlists for music artists); keep any that are on
 	const extras = $derived(data.logSources.filter((s) => s.forKinds.some((k) => picked.includes(k))));
 	// An extra can't stay on once the kind it belongs to is unticked
@@ -44,10 +83,94 @@
 		{ value: 'done', label: 'Done (finished, tried)' },
 		{ value: 'dropped', label: 'Dropped' }
 	];
-
-	let newType = $state('text');
 	const typeLabel = (t: string) => FIELD_TYPES.find((x) => x.value === t)?.label ?? t;
+	const hasChoices = (t: FieldType) => t === 'select' || t === 'multiselect';
 	const saved = $derived(page.url.searchParams.get('saved') === '1');
+
+	// --- Fields ---------------------------------------------------------------------------
+	/** Swap with the nearest field of the same kind (item or log) above or below. */
+	function moveField(f: FieldDraft, dir: -1 | 1) {
+		const i = fields.indexOf(f);
+		let j = i + dir;
+		while (j >= 0 && j < fields.length && fields[j].scope !== f.scope) j += dir;
+		if (j < 0 || j >= fields.length) return;
+		[fields[i], fields[j]] = [fields[j], fields[i]];
+		changed();
+	}
+
+	let newCount = 0;
+	let adding = $state({
+		label: '',
+		type: 'text' as FieldType,
+		scope: 'item' as FieldScope,
+		options: '',
+		unit: '',
+		showOnCard: false
+	});
+	let addError = $state('');
+	let justAdded = $state('');
+
+	function addField() {
+		const label = adding.label.trim();
+		addError = '';
+		if (!label) {
+			addError = 'Give the field a name.';
+			return;
+		}
+		if (hasChoices(adding.type) && !adding.options.split(',').some((o) => o.trim())) {
+			addError = 'List the choices, separated by commas.';
+			return;
+		}
+		fields.push({ uid: `new${++newCount}`, id: null, removed: false, ...adding, label });
+		justAdded = label;
+		adding = { label: '', type: 'text', scope: adding.scope, options: '', unit: '', showOnCard: false };
+		changed();
+	}
+
+	const fieldsJson = $derived(
+		JSON.stringify(
+			fields.map(({ id, scope, type, label, unit, options, showOnCard, removed }) => ({
+				id,
+				scope,
+				type,
+				label,
+				unit,
+				options,
+				showOnCard,
+				removed
+			}))
+		)
+	);
+
+	// --- Unsaved changes ------------------------------------------------------------------
+	let formEl = $state<HTMLFormElement>();
+	let baseline = '';
+	let dirty = $state(false);
+	let saving = $state(false);
+	const snapshot = () =>
+		formEl ? JSON.stringify([...new FormData(formEl)].map(([k, v]) => [k, String(v)])) : '';
+
+	/** Compares the form with what was last saved (after the DOM has caught up). */
+	async function changed() {
+		await tick();
+		dirty = snapshot() !== baseline;
+	}
+	$effect(() => {
+		void data.category;
+		void data.fieldRows;
+		tick().then(() => {
+			baseline = snapshot();
+			dirty = false;
+			justAdded = '';
+		});
+	});
+
+	beforeNavigate((nav) => {
+		if (!dirty || saving) return;
+		if (nav.willUnload)
+			nav.cancel(); // the browser asks "Leave site?"
+		else if (!confirm('You have unsaved changes. Leave without saving them?')) nav.cancel();
+	});
 </script>
 
 <svelte:head><title>Edit {c.name} · The Whatever Tracker</title></svelte:head>
@@ -62,20 +185,33 @@
 		<h1 class="text-2xl font-semibold tracking-tight">List settings</h1>
 		{#if data.isNew}
 			<p class="mt-1 text-sm text-muted">
-				Your list is ready. Add the fields you want to track for each entry below.
+				Your list is ready. Add the fields you want to track for each entry below, then press Save.
 			</p>
 		{/if}
 	</div>
 
-	{#if saved}<p class="ok-box">Saved.</p>{/if}
-	{#if form?.message}<p class="error-box">{form.message}</p>{/if}
+	{#if saved && !dirty}<p class="ok-box">Saved.</p>{/if}
 
-	<!-- Basics and lookups save together -->
-	<form method="POST" action="?/save" class="space-y-8">
+	<form
+		method="POST"
+		action="?/save"
+		class="space-y-8"
+		bind:this={formEl}
+		oninput={changed}
+		onchange={changed}
+		use:enhance={() => {
+			saving = true;
+			return async ({ update }) => {
+				await update({ reset: false });
+				saving = false;
+				changed();
+			};
+		}}
+	>
 		<section class="card space-y-5 p-4 sm:p-5">
 			<h2 class="font-semibold">Basics</h2>
 			<div class="flex gap-3">
-				<div class="w-20">
+				<div class="w-20" onclick={changed} role="presentation">
 					<label class="label" for="icon">Icon</label>
 					{#key c.id}
 						<IconPicker name="icon" value={c.icon} hint={nameDraft} />
@@ -92,7 +228,7 @@
 				<div class="flex flex-wrap gap-2">
 					{#each data.colors as [name, hex] (name)}
 						<label class="cursor-pointer">
-							<input type="radio" name="color" value={name} checked={c.color === name} class="peer sr-only" />
+							<input type="radio" name="color" value={name} bind:group={color} class="peer sr-only" />
 							<span
 								class="block h-8 w-8 rounded-full ring-offset-2 ring-offset-surface peer-checked:ring-2 peer-checked:ring-fg peer-focus-visible:ring-2 peer-focus-visible:ring-accent"
 								style="background: {hex}"
@@ -124,7 +260,10 @@
 								type="button"
 								class="btn btn-ghost btn-icon"
 								disabled={statuses.length <= 1}
-								onclick={() => statuses.splice(i, 1)}
+								onclick={() => {
+									statuses.splice(i, 1);
+									changed();
+								}}
 								aria-label="Remove status {s.label}"
 							>
 								<Icon name="x" size={18} />
@@ -135,7 +274,10 @@
 				<button
 					type="button"
 					class="btn btn-sm mt-2"
-					onclick={() => statuses.push({ key: '', label: '', group: 'active' })}
+					onclick={() => {
+						statuses.push({ key: '', label: '', group: 'active' });
+						changed();
+					}}
 				>
 					<Icon name="plus" size={14} /> Add status
 				</button>
@@ -150,7 +292,7 @@
 				<input
 					type="checkbox"
 					name="showUpNext"
-					checked={c.showUpNext}
+					bind:checked={showUpNext}
 					class="mt-0.5 h-4 w-4 shrink-0 accent-[var(--accent)]"
 				/>
 				<span>
@@ -202,151 +344,198 @@
 					</div>
 				</fieldset>
 			{/if}
-
-			<button class="btn btn-primary">Save settings</button>
 		</section>
-	</form>
 
-	<!-- Fields -->
-	<section class="card space-y-4 p-4 sm:p-5">
-		<div>
-			<h2 class="font-semibold">Fields</h2>
-			<p class="text-sm text-muted">
-				<strong>Item fields</strong> describe the thing (distillery, vintage). <strong>Log fields</strong> are filled
-				in each time (tasting notes, who won).
-			</p>
-		</div>
-		{#if form?.fieldMessage}<p class="error-box">{form.fieldMessage}</p>{/if}
-
-		{#each ['item', 'log'] as scope (scope)}
-			{@const list = data.fieldRows.filter((f) => f.scope === scope)}
+		<!-- Fields -->
+		<section class="card space-y-4 p-4 sm:p-5">
 			<div>
-				<h3 class="section-title mb-2">{scope === 'item' ? 'Item fields' : 'Log fields'}</h3>
-				{#if list.length === 0}
-					<p class="text-sm text-muted">None yet.</p>
-				{:else}
-					<ul class="divide-y divide-border rounded-xl border border-border">
-						{#each list as f (f.id)}
-							<li class="p-3">
-								<details>
-									<summary class="flex cursor-pointer list-none items-center gap-2">
-										<span class="min-w-0 flex-1 truncate font-medium">{f.label}</span>
-										<span class="badge">{typeLabel(f.type)}</span>
-										{#if f.showOnCard}<span class="badge">on card</span>{/if}
-										<Icon name="chevron-down" size={16} class="text-muted" />
-									</summary>
-									<form
-										method="POST"
-										action="?/updateField"
-										use:enhance={() =>
-											async ({ update }) =>
-												update({ reset: false })}
-										class="mt-3 grid gap-3 sm:grid-cols-2"
-									>
-										<input type="hidden" name="id" value={f.id} />
-										<div>
-											<label class="label" for="fl-{f.id}">Name</label>
-											<input class="input" id="fl-{f.id}" name="label" value={f.label} maxlength="60" />
-										</div>
-										<div>
-											<label class="label" for="fu-{f.id}">Unit</label>
-											<input
-												class="input"
-												id="fu-{f.id}"
-												name="unit"
-												value={f.unit ?? ''}
-												maxlength="20"
-												placeholder="%, yrs, min…"
-											/>
-										</div>
-										{#if f.type === 'select' || f.type === 'multiselect'}
-											<div class="sm:col-span-2">
-												<label class="label" for="fo-{f.id}">Choices</label>
-												<textarea class="input" id="fo-{f.id}" name="options" rows="2"
-													>{f.options.join(', ')}</textarea
-												>
-											</div>
-										{/if}
-										<label class="flex items-center gap-2 text-sm sm:col-span-2">
-											<input
-												type="checkbox"
-												name="showOnCard"
-												checked={f.showOnCard}
-												class="h-4 w-4 accent-[var(--accent)]"
-											/>
-											Show on cards in the list view
-										</label>
-										<div class="flex flex-wrap gap-2 sm:col-span-2">
-											<button class="btn btn-primary btn-sm">Save field</button>
-											<button class="btn btn-sm" formaction="?/moveField" name="dir" value="up"
-												>Move up</button
-											>
-											<button class="btn btn-sm" formaction="?/moveField" name="dir" value="down"
-												>Move down</button
-											>
+				<h2 class="font-semibold">Fields</h2>
+				<p class="text-sm text-muted">
+					<strong>Item fields</strong> describe the thing (distillery, vintage). <strong>Log fields</strong> are
+					filled in each time (tasting notes, who won).
+				</p>
+			</div>
+
+			{#each ['item', 'log'] as const as scope (scope)}
+				{@const list = fields.filter((f) => f.scope === scope)}
+				<div>
+					<h3 class="section-title mb-2">{scope === 'item' ? 'Item fields' : 'Log fields'}</h3>
+					{#if list.length === 0}
+						<p class="text-sm text-muted">None yet.</p>
+					{:else}
+						<ul class="divide-y divide-border rounded-xl border border-border">
+							{#each list as f, i (f.uid)}
+								<li class="p-3">
+									{#if f.removed}
+										<div class="flex items-center gap-2 text-sm">
+											<span class="min-w-0 flex-1 truncate text-muted line-through">{f.label}</span>
+											<span class="text-xs text-danger">Removed when you save</span>
 											<button
-												class="btn btn-ghost btn-sm text-danger"
-												formaction="?/deleteField"
-												onclick={(e) => {
-													if (
-														!confirm(
-															`Remove the “${f.label}” field? Values already entered are kept and come back if you re-add it.`
-														)
-													)
-														e.preventDefault();
-												}}
+												type="button"
+												class="btn btn-ghost btn-sm"
+												onclick={() => {
+													f.removed = false;
+													changed();
+												}}>Undo</button
 											>
-												Remove
-											</button>
 										</div>
-										{#if form?.fieldSaved === f.id}<p class="text-sm text-emerald-600 sm:col-span-2">
-												Saved.
-											</p>{/if}
-									</form>
-								</details>
-							</li>
-						{/each}
-					</ul>
+									{:else}
+										<details open={f.id === null && f.label === justAdded}>
+											<summary class="flex cursor-pointer list-none items-center gap-2">
+												<span class="min-w-0 flex-1 truncate font-medium">{f.label || 'Untitled field'}</span>
+												{#if f.id === null}<span class="badge">new</span>{/if}
+												<span class="badge">{typeLabel(f.type)}</span>
+												{#if f.showOnCard}<span class="badge">on card</span>{/if}
+												<Icon name="chevron-down" size={16} class="text-muted" />
+											</summary>
+											<div class="mt-3 grid gap-3 sm:grid-cols-2">
+												<div>
+													<label class="label" for="fl-{f.uid}">Name</label>
+													<input class="input" id="fl-{f.uid}" bind:value={f.label} maxlength="60" />
+												</div>
+												<div>
+													<label class="label" for="fu-{f.uid}">Unit</label>
+													<input
+														class="input"
+														id="fu-{f.uid}"
+														bind:value={f.unit}
+														maxlength="20"
+														placeholder="%, yrs, min…"
+													/>
+												</div>
+												{#if hasChoices(f.type)}
+													<div class="sm:col-span-2">
+														<label class="label" for="fo-{f.uid}">Choices</label>
+														<textarea class="input" id="fo-{f.uid}" rows="2" bind:value={f.options}
+														></textarea>
+														<p class="hint">Separated by commas.</p>
+													</div>
+												{/if}
+												<label class="flex items-center gap-2 text-sm sm:col-span-2">
+													<input
+														type="checkbox"
+														bind:checked={f.showOnCard}
+														class="h-4 w-4 accent-[var(--accent)]"
+													/>
+													Show on cards in the list view
+												</label>
+												<div class="flex flex-wrap gap-2 sm:col-span-2">
+													<button
+														type="button"
+														class="btn btn-sm"
+														disabled={i === 0}
+														onclick={() => moveField(f, -1)}
+													>
+														Move up
+													</button>
+													<button
+														type="button"
+														class="btn btn-sm"
+														disabled={i === list.length - 1}
+														onclick={() => moveField(f, 1)}
+													>
+														Move down
+													</button>
+													<button
+														type="button"
+														class="btn btn-ghost btn-sm text-danger"
+														onclick={() => {
+															if (f.id === null) fields.splice(fields.indexOf(f), 1);
+															else f.removed = true;
+															changed();
+														}}
+													>
+														Remove
+													</button>
+												</div>
+												{#if f.id !== null}
+													<p class="text-xs text-muted sm:col-span-2">
+														Removing a field keeps what's already been entered; adding it back with the same
+														name brings it back.
+													</p>
+												{/if}
+											</div>
+										</details>
+									{/if}
+								</li>
+							{/each}
+						</ul>
+					{/if}
+				</div>
+			{/each}
+
+			<!-- Not submitted directly: "Add field" puts it in the list above, saved with everything else -->
+			<div class="space-y-3 rounded-xl border border-dashed border-border p-3">
+				<h3 class="text-sm font-medium">Add a field</h3>
+				<div class="grid gap-3 sm:grid-cols-3">
+					<input
+						class="input sm:col-span-1"
+						bind:value={adding.label}
+						placeholder="Field name"
+						maxlength="60"
+						aria-label="New field name"
+						onkeydown={(e) => {
+							if (e.key === 'Enter') {
+								e.preventDefault();
+								addField();
+							}
+						}}
+					/>
+					<select class="input" bind:value={adding.type} aria-label="New field type">
+						{#each FIELD_TYPES as t (t.value)}<option value={t.value}>{t.label}</option>{/each}
+					</select>
+					<select class="input" bind:value={adding.scope} aria-label="New field applies to">
+						<option value="item">Item field</option>
+						<option value="log">Log field</option>
+					</select>
+				</div>
+				{#if hasChoices(adding.type)}
+					<input
+						class="input"
+						bind:value={adding.options}
+						placeholder="Choices, separated by commas"
+						aria-label="New field choices"
+					/>
+				{/if}
+				{#if adding.type === 'number'}
+					<input
+						class="input sm:w-40"
+						bind:value={adding.unit}
+						placeholder="Unit (optional)"
+						aria-label="Unit"
+					/>
+				{/if}
+				<label class="flex items-center gap-2 text-sm">
+					<input type="checkbox" bind:checked={adding.showOnCard} class="h-4 w-4 accent-[var(--accent)]" /> Show
+					on cards
+				</label>
+				{#if addError}<p class="error-box">{addError}</p>{/if}
+				<div class="flex flex-wrap items-center gap-3">
+					<button type="button" class="btn btn-sm" onclick={addField}>
+						<Icon name="plus" size={14} /> Add field
+					</button>
+					{#if justAdded && dirty}
+						<span class="text-sm text-muted">Added “{justAdded}”. Press Save settings to keep it.</span>
+					{/if}
+				</div>
+			</div>
+			<input type="hidden" name="fields_json" value={fieldsJson} />
+		</section>
+
+		<!-- One Save for the whole page, always in reach -->
+		<div class="sticky bottom-20 z-10 md:bottom-4">
+			<div class="card flex flex-wrap items-center gap-3 p-3 shadow-lg">
+				<button class="btn btn-primary" disabled={saving}>{saving ? 'Saving…' : 'Save settings'}</button>
+				{#if form?.message}
+					<p class="text-sm text-danger" role="alert">{form.message}</p>
+				{:else if dirty}
+					<p class="text-sm text-muted">You have unsaved changes.</p>
+				{:else if saved}
+					<p class="text-sm text-emerald-700 dark:text-emerald-400">All changes saved.</p>
 				{/if}
 			</div>
-		{/each}
-
-		<form
-			method="POST"
-			action="?/addField"
-			use:enhance
-			class="space-y-3 rounded-xl border border-dashed border-border p-3"
-		>
-			<h3 class="text-sm font-medium">Add a field</h3>
-			<div class="grid gap-3 sm:grid-cols-3">
-				<input
-					class="input sm:col-span-1"
-					name="label"
-					placeholder="Field name"
-					required
-					maxlength="60"
-					aria-label="Field name"
-				/>
-				<select class="input" name="type" bind:value={newType} aria-label="Field type">
-					{#each FIELD_TYPES as t (t.value)}<option value={t.value}>{t.label}</option>{/each}
-				</select>
-				<select class="input" name="scope" aria-label="Field applies to">
-					<option value="item">Item field</option>
-					<option value="log">Log field</option>
-				</select>
-			</div>
-			{#if newType === 'select' || newType === 'multiselect'}
-				<input class="input" name="options" placeholder="Choices, separated by commas" aria-label="Choices" />
-			{/if}
-			{#if newType === 'number'}
-				<input class="input sm:w-40" name="unit" placeholder="Unit (optional)" aria-label="Unit" />
-			{/if}
-			<label class="flex items-center gap-2 text-sm">
-				<input type="checkbox" name="showOnCard" class="h-4 w-4 accent-[var(--accent)]" /> Show on cards
-			</label>
-			<button class="btn btn-primary btn-sm"><Icon name="plus" size={14} /> Add field</button>
-		</form>
-	</section>
+		</div>
+	</form>
 
 	<!-- Danger zone -->
 	<section class="card border-danger/40 p-4 sm:p-5">

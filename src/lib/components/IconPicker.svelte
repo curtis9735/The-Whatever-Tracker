@@ -111,13 +111,15 @@
 			{/if}
 		</div>
 
-		<form class="flex items-center gap-2 border-t border-border p-3" onsubmit={useCustom}>
+		<!-- Not a <form>: the picker sits inside the list settings form, and forms can't be nested -->
+		<div class="flex items-center gap-2 border-t border-border p-3">
 			<input
 				class="input w-20 text-center text-xl"
 				bind:value={custom}
 				placeholder="🙂"
 				aria-label="Any emoji"
 				autocomplete="off"
+				onkeydown={(e) => e.key === 'Enter' && useCustom(e)}
 			/>
 			<p class="flex-1 text-xs text-muted">
 				Or type or paste any emoji.
@@ -126,8 +128,8 @@
 					<kbd class="rounded border border-border px-1">.</kbd> opens the emoji keyboard.
 				</span>
 			</p>
-			<button class="btn btn-sm" disabled={!custom.trim()}>Use</button>
-		</form>
+			<button type="button" class="btn btn-sm" disabled={!custom.trim()} onclick={useCustom}>Use</button>
+		</div>
 	</div>
 </dialog>
 
