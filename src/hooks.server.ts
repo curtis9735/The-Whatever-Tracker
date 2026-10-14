@@ -59,5 +59,9 @@ export const handle: Handle = async ({ event, resolve }) => {
 	response.headers.set('Referrer-Policy', 'strict-origin-when-cross-origin');
 	response.headers.set('X-Frame-Options', 'SAMEORIGIN');
 	response.headers.set('Permissions-Policy', 'camera=(self), microphone=(), geolocation=()');
+	// Served over HTTPS (ORIGIN is https://…): browsers should never fall back to plain HTTP
+	if (event.url.protocol === 'https:') {
+		response.headers.set('Strict-Transport-Security', 'max-age=31536000');
+	}
 	return response;
 };

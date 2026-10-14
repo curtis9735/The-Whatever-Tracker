@@ -1,7 +1,10 @@
 import crypto from 'node:crypto';
+import fs from 'node:fs';
+import path from 'node:path';
 import { hash, verify } from '@node-rs/argon2';
 import type { Cookies } from '@sveltejs/kit';
 import { count, eq } from 'drizzle-orm';
+import { cfg } from './config';
 import { db, schema } from './db';
 
 const DAY = 24 * 60 * 60 * 1000;
@@ -155,7 +158,14 @@ export function clearSetupCode() {
 	setupCode = null;
 }
 
-// --- Login throttling -----------------------------------------------------------------
+// --- Sign-in throttling ---------------------------------------------------------------
+//
+// Two limits, so that neither many addresses nor many usernames buy unlimited guesses:
+//  - per address: 20 failed sign-ins per 15 minutes, whatever usernames were tried
+//  - per account: 10 failed sign-ins per 15 minutes, from anywhere. This one still holds if
+//    the app is reached without the proxy and the client address can be faked.
+// A browser that has signed in to an account before carries a trusted-device cookie and skips
+// the per-account limit, so someone guessing at your username can't lock you out.
 
 /** Client IP for throttling. adapter-node throws if ADDRESS_HEADER is set but the request skipped the proxy. */
 export function clientAddress(getClientAddress: () => string) {
@@ -166,27 +176,110 @@ export function clientAddress(getClientAddress: () => string) {
 	}
 }
 
-const attempts = new Map<string, { count: number; resetAt: number }>();
-const MAX_ATTEMPTS = 10;
 const WINDOW = 15 * 60 * 1000;
 
-export function loginAllowed(key: string) {
-	const now = Date.now();
-	const entry = attempts.get(key);
-	if (!entry || entry.resetAt < now) return true;
-	return entry.count < MAX_ATTEMPTS;
-}
+export class FailureCounter {
+	private entries = new Map<string, { count: number; resetAt: number }>();
+	constructor(
+		private max: number,
+		private windowMs = WINDOW
+	) {}
 
-export function recordFailedLogin(key: string) {
-	const now = Date.now();
-	const entry = attempts.get(key);
-	if (!entry || entry.resetAt < now) attempts.set(key, { count: 1, resetAt: now + WINDOW });
-	else entry.count++;
-	if (attempts.size > 5000) {
-		for (const [k, v] of attempts) if (v.resetAt < now) attempts.delete(k);
+	allowed(key: string, now = Date.now()) {
+		const entry = this.entries.get(key);
+		return !entry || entry.resetAt < now || entry.count < this.max;
+	}
+
+	fail(key: string, now = Date.now()) {
+		const entry = this.entries.get(key);
+		if (!entry || entry.resetAt < now) this.entries.set(key, { count: 1, resetAt: now + this.windowMs });
+		else entry.count++;
+		if (this.entries.size > 5000) {
+			for (const [k, v] of this.entries) if (v.resetAt < now) this.entries.delete(k);
+		}
+	}
+
+	clear(key: string) {
+		this.entries.delete(key);
 	}
 }
 
-export function clearFailedLogins(key: string) {
-	attempts.delete(key);
+/** Failed sign-ins (and setup-code guesses) per client address */
+export const addressFailures = new FailureCounter(20);
+/** Failed sign-ins per username, from any address */
+export const accountFailures = new FailureCounter(10);
+/** Wrong "current password" when changing it, per user (a stolen session can't brute-force it) */
+export const passwordCheckFailures = new FailureCounter(5);
+
+// A wrong username must take as long as a wrong password, or response times reveal which
+// usernames exist. Unknown usernames are checked against this throwaway hash.
+let dummyHash: Promise<string> | null = null;
+
+export async function verifyPasswordOrDummy(passwordHash: string | null, password: string) {
+	if (passwordHash) return verifyPassword(passwordHash, password);
+	dummyHash ??= hashPassword(crypto.randomBytes(16).toString('hex'));
+	await verifyPassword(await dummyHash, password);
+	return false;
+}
+
+// --- Trusted devices --------------------------------------------------------------------
+
+const DEVICE_COOKIE = 'wt_device';
+let deviceSecret: Buffer | null = null;
+
+/** A random key kept in the data folder, so trusted devices survive restarts and updates. */
+function secret() {
+	if (deviceSecret) return deviceSecret;
+	const file = path.join(cfg().dataDir, 'device-secret');
+	try {
+		deviceSecret = Buffer.from(fs.readFileSync(file, 'utf8').trim(), 'hex');
+	} catch {
+		deviceSecret = null;
+	}
+	if (!deviceSecret || deviceSecret.length < 32) {
+		deviceSecret = crypto.randomBytes(32);
+		fs.mkdirSync(path.dirname(file), { recursive: true });
+		fs.writeFileSync(file, deviceSecret.toString('hex'), { mode: 0o600 });
+	}
+	return deviceSecret;
+}
+
+function deviceProof(username: string) {
+	return crypto.createHmac('sha256', secret()).update(`device:${username}`).digest('base64url');
+}
+
+/** This browser has signed in to `username` before. */
+export function isTrustedDevice(cookies: Cookies, username: string) {
+	const value = cookies.get(DEVICE_COOKIE);
+	if (!value || !username) return false;
+	const a = Buffer.from(value);
+	const b = Buffer.from(deviceProof(username));
+	return a.length === b.length && crypto.timingSafeEqual(a, b);
+}
+
+export function rememberDevice(cookies: Cookies, username: string, secure: boolean) {
+	cookies.set(DEVICE_COOKIE, deviceProof(username), {
+		httpOnly: true,
+		sameSite: 'lax',
+		path: '/',
+		secure,
+		maxAge: 365 * 24 * 60 * 60
+	});
+}
+
+// --- Redirects --------------------------------------------------------------------------
+
+/**
+ * Where to go after signing in: only ever a page of this app. "//evil.com", "/\evil.com"
+ * and the like resolve to another site, so anything not on this origin goes home instead.
+ */
+export function safeRedirectTarget(next: string | null, origin: string) {
+	if (!next) return '/';
+	try {
+		const target = new URL(next, origin);
+		if (target.origin !== origin) return '/';
+		return `${target.pathname}${target.search}${target.hash}` || '/';
+	} catch {
+		return '/';
+	}
 }

@@ -6,6 +6,7 @@ import {
 	generateSessionToken,
 	hashPassword,
 	invalidateUserSessions,
+	passwordCheckFailures,
 	setSessionCookie,
 	validatePassword,
 	verifyPassword
@@ -54,9 +55,16 @@ export const actions: Actions = {
 		const current = String(form.get('current') ?? '');
 		const next = String(form.get('next') ?? '');
 		const user = db().select().from(schema.users).where(eq(schema.users.id, locals.user!.id)).get()!;
+		// Limited, so someone holding a stolen session can't guess the password to take the account over
+		const key = String(user.id);
+		if (!passwordCheckFailures.allowed(key)) {
+			return fail(429, { passwordMessage: 'Too many attempts. Wait 15 minutes and try again.' });
+		}
 		if (!(await verifyPassword(user.passwordHash, current))) {
+			passwordCheckFailures.fail(key);
 			return fail(400, { passwordMessage: 'Your current password is not right.' });
 		}
+		passwordCheckFailures.clear(key);
 		const err = validatePassword(next);
 		if (err) return fail(400, { passwordMessage: err });
 		db()

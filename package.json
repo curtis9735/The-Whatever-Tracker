@@ -1,6 +1,6 @@
 {
 	"name": "whatever-tracker",
-	"version": "0.3.2",
+	"version": "0.3.3",
 	"description": "Self-hosted tracker for anything: movies, games, concerts, whiskey, cheese, cats...",
 	"private": true,
 	"type": "module",

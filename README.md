@@ -93,6 +93,41 @@ Everything lives in the data folder:
 Back up the whole folder with **Hyper Backup**. To restore, stop the stack, replace `tracker.db` with a snapshot
 (renamed to `tracker.db`), and start the stack again.
 
+### Security
+
+Every page, API call and photo needs a signed-in session. The only things that answer without one are the
+login page, the one-time setup page (which closes for good once the first account exists) and a bare health
+check.
+
+- **Sessions:** random 192-bit tokens, stored only as hashes, in a cookie that is HttpOnly, Secure (over
+  HTTPS) and SameSite=Lax. Logging out or changing your password ends them.
+- **Passwords:** hashed with Argon2id.
+- **Password guessing is limited two ways:**
+  - per address: 20 failed sign-ins in 15 minutes;
+  - per account: 10 in 15 minutes, from anywhere.
+
+  A browser that has signed in to that account before isn't held back by the per-account limit, so someone
+  guessing at your username can't lock you out. A wrong username takes as long as a wrong password, so
+  usernames can't be discovered.
+
+- **Other sites can't act for you:** form posts from another site are rejected, and so are form posts with no
+  origin at all. Pages can't be framed by other sites, and a strict Content-Security-Policy limits what
+  scripts can run.
+- **Household members** only ever see their own lists and photos. Account management and API keys are
+  admin-only.
+
+To keep it that way:
+
+- **Use a long, unique password** for every account (a passphrase is easiest).
+- **With DSM's built-in reverse proxy, set `HOST_IP=127.0.0.1`** in the stack's environment variables. Port
+  8765 then only answers on the NAS itself, so every visitor goes through the proxy's HTTPS. Leave it unset if
+  your proxy runs on another machine or in another container.
+- **Don't forward port 8765 on your router.** Only the proxy's HTTPS port (443) should be open to the
+  internet.
+- **Keep the image updated** (see _Updating_ above).
+- **Want no public exposure at all?** Skip the port forwarding and reach the tracker over a VPN instead, such
+  as Tailscale or DSM's VPN Server.
+
 ---
 
 ## Metadata sources (API keys)

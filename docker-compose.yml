@@ -10,7 +10,10 @@ services:
     # Run as your DSM user so files in the data folder are yours (find it with `id` over SSH)
     user: '${PUID:-1026}:${PGID:-100}'
     ports:
-      - '${HOST_PORT:-8765}:3000'
+      # HOST_IP=127.0.0.1 makes the port reachable only from the NAS itself, so everyone has to come
+      # through DSM's reverse proxy. Leave it unset if the proxy runs elsewhere (e.g. another container
+      # reaching <nas-ip>:8765).
+      - '${HOST_IP:-0.0.0.0}:${HOST_PORT:-8765}:3000'
     volumes:
       # Database, photos and nightly backups all live here: back this folder up
       - ${DATA_PATH:-/volume1/docker/whatever-tracker}:/data

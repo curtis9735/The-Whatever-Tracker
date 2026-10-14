@@ -1,15 +1,15 @@
 import { fail, redirect } from '@sveltejs/kit';
 import { db, schema } from '$lib/server/db';
 import {
+	addressFailures,
 	checkSetupCode,
 	clientAddress,
 	clearSetupCode,
 	createSession,
 	generateSessionToken,
 	hashPassword,
-	loginAllowed,
 	normalizeUsername,
-	recordFailedLogin,
+	rememberDevice,
 	setSessionCookie,
 	userCount,
 	validatePassword,
@@ -33,11 +33,11 @@ export const actions: Actions = {
 		const keep = { username, displayName };
 		const throttleKey = `setup|${clientAddress(getClientAddress)}`;
 
-		if (!loginAllowed(throttleKey)) {
+		if (!addressFailures.allowed(throttleKey)) {
 			return fail(429, { ...keep, message: 'Too many attempts. Wait 15 minutes and try again.' });
 		}
 		if (!checkSetupCode(code)) {
-			recordFailedLogin(throttleKey);
+			addressFailures.fail(throttleKey);
 			return fail(400, {
 				...keep,
 				message: 'That setup code is not right. Find it in the container logs (Portainer → container → Logs).'
@@ -58,6 +58,7 @@ export const actions: Actions = {
 		const token = generateSessionToken();
 		const session = createSession(token, user.id);
 		setSessionCookie(cookies, token, session.expiresAt, url.protocol === 'https:');
+		rememberDevice(cookies, username, url.protocol === 'https:');
 		redirect(303, '/onboarding');
 	}
 };
