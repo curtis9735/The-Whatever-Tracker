@@ -106,7 +106,8 @@ export const actions: Actions = {
 			icon: cleanIcon(form.get('icon')),
 			color: color in CATEGORY_COLORS ? color : 'slate',
 			statuses,
-			providerKinds
+			providerKinds,
+			showUpNext: form.get('showUpNext') === 'on'
 		});
 		redirect(303, `/categories/${slug}/edit?saved=1`);
 	},

@@ -47,6 +47,8 @@ export const categories = sqliteTable(
 			.notNull()
 			.default(sql`'[]'`),
 		templateKey: text('template_key'),
+		/** Planned items from this list appear in "Up next" on the home page */
+		showUpNext: integer('show_up_next', { mode: 'boolean' }).notNull().default(true),
 		sortOrder: integer('sort_order').notNull().default(0),
 		createdAt: createdAt()
 	},

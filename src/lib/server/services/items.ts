@@ -546,7 +546,9 @@ export function recentActivity(userId: number, limit = 15) {
 	}[];
 }
 
-/** Items in a "planned" status (across categories) or favorites, newest first. */
+/**
+ * Items in a "planned" status (from lists that show them in Up next) or favorites, newest first.
+ */
 export function itemStrip(userId: number, kind: 'planned' | 'favorites', limit = 12) {
 	const rows = rawDb()
 		.prepare(
@@ -555,7 +557,7 @@ export function itemStrip(userId: number, kind: 'planned' | 'favorites', limit =
 			 FROM items i
 			 JOIN categories c ON c.id = i.category_id
 			 LEFT JOIN images im ON im.id = i.cover_image_id
-			 WHERE i.user_id = ? ${kind === 'favorites' ? 'AND i.favorite = 1' : ''}
+			 WHERE i.user_id = ? ${kind === 'favorites' ? 'AND i.favorite = 1' : 'AND c.show_up_next = 1'}
 			 ORDER BY i.updated_at DESC
 			 LIMIT 300`
 		)

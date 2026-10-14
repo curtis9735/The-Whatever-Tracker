@@ -109,6 +109,8 @@ export interface CategoryInput {
 	color: string;
 	statuses: StatusDef[];
 	providerKinds: string[];
+	/** Planned items appear in "Up next" on the home page (on unless turned off) */
+	showUpNext?: boolean;
 }
 
 export function createCategory(userId: number, input: CategoryInput, templateKey: string | null = null) {
@@ -244,7 +246,8 @@ export function updateCategory(userId: number, id: number, input: CategoryInput)
 			icon: input.icon || '📦',
 			color: input.color,
 			statuses: input.statuses,
-			providerKinds: input.providerKinds
+			providerKinds: input.providerKinds,
+			...(input.showUpNext !== undefined ? { showUpNext: input.showUpNext } : {})
 		})
 		.where(and(eq(schema.categories.id, id), eq(schema.categories.userId, userId)))
 		.run();

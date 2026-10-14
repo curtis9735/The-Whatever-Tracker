@@ -1,0 +1,1 @@
+ALTER TABLE `categories` ADD `show_up_next` integer DEFAULT true NOT NULL;

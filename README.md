@@ -168,6 +168,9 @@ list has **TV shows** ticked.
   remove it.
 - **Lists:** **Manage lists** lets you rename lists, reorder them, pick an emoji and color, edit the statuses
   and their groups, choose what the list holds so details fill in automatically, and add or remove fields.
+- **Up next** on the home page shows items in a planned status (Wishlist, Want to see…). To keep a long wish
+  list off the home page, untick **Show in Up next on the home page** in that list's settings. Its items stay
+  in the list, and favorites from it still appear under Favorites.
 - **Spreadsheet import:** to bring in a table you already keep (a whiskey spreadsheet, say), open the list and
   tap the upload icon beside the settings gear (or **Me → Your data**, then pick the list). Select the cells in
   your spreadsheet **including the header row**, copy, and paste them in, or choose a CSV file. Only include the

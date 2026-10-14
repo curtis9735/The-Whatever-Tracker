@@ -31,6 +31,13 @@
 		const stale = data.logSources.filter((s) => picked.includes(s.key) && !extras.includes(s));
 		if (stale.length) picked = picked.filter((k) => !stale.some((s) => s.key === k));
 	});
+	// "Wishlist" or "Planning or Watching next": the statuses that put an item in Up next
+	const plannedLabels = $derived.by(() => {
+		const names = statuses
+			.filter((s) => s.group === 'planned' && s.label.trim())
+			.map((s) => `“${s.label.trim()}”`);
+		return names.length > 1 ? `${names.slice(0, -1).join(', ')} or ${names.at(-1)}` : (names[0] ?? '');
+	});
 	const GROUPS: { value: StatusGroup; label: string }[] = [
 		{ value: 'planned', label: 'Planned (wishlist, to-do)' },
 		{ value: 'active', label: 'Active (in progress, owned)' },
@@ -138,6 +145,24 @@
 					value={JSON.stringify(statuses.filter((s) => s.label.trim()))}
 				/>
 			</fieldset>
+
+			<label class="flex items-start gap-3 text-sm">
+				<input
+					type="checkbox"
+					name="showUpNext"
+					checked={c.showUpNext}
+					class="mt-0.5 h-4 w-4 shrink-0 accent-[var(--accent)]"
+				/>
+				<span>
+					<span class="font-medium">Show in Up next on the home page</span>
+					<span class="block text-xs text-muted">
+						{plannedLabels
+							? `Items marked ${plannedLabels} appear there.`
+							: 'Items in a planned status appear there.'} Turn it off for long wish lists you don't want on the
+						home page. They're still in the list itself.
+					</span>
+				</span>
+			</label>
 		</section>
 
 		<!-- What the list holds decides where new entries are looked up -->
