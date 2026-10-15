@@ -175,6 +175,14 @@ list has **TV shows** ticked.
   MusicBrainz), the **Add** form looks the name up as you type. Pick a match and it saves the poster and details
   along with your rating and photos. Anything added without a match can get one later with **Find details on …**
   on its page.
+- **Journal:** **Journal** in the sidebar (or **See all in Journal** under Recent activity on the home page)
+  shows everything you've logged, newest first, grouped by day.
+  - **Dates:** pick a range (Today, This Week, Last 30 Days, This Year, Last 12 Months, All Time…) or set
+    your own under **Custom Range**.
+  - **One list:** the list menu narrows it to, say, just concerts.
+  - **Stats:** how much you logged and on how many days, your busiest day of the week, and your current and
+    longest streak.
+  - **Activity history:** a calendar heatmap; click any day to see just that day.
 - **Logs:** each log has a date, a rating for that time, a place, a price, notes, photos and the list's log
   fields. Logging something that was in a "planned" status (wishlist, to watch) moves it to the first "done"
   status automatically.

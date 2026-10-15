@@ -69,7 +69,12 @@
 {/if}
 
 <section>
-	<h2 class="section-title mb-3">Recent activity</h2>
+	<div class="mb-3 flex items-center justify-between gap-3">
+		<h2 class="section-title">Recent activity</h2>
+		<a href="/journal" class="flex items-center gap-1 text-sm text-accent hover:underline">
+			<Icon name="book" size={14} /> See all in Journal
+		</a>
+	</div>
 	{#if data.activity.length === 0}
 		<p class="text-sm text-muted">
 			Nothing logged yet. Search for something you've watched, played or tasted and add a log.

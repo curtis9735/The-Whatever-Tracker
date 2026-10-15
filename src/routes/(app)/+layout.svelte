@@ -31,6 +31,9 @@
 		</a>
 		<nav class="flex-1 overflow-y-auto px-3 pb-4" aria-label="Main">
 			<a href="/" class="nav-link" class:nav-active={isActive('/')}><Icon name="home" size={18} /> Home</a>
+			<a href="/journal" class="nav-link" class:nav-active={isActive('/journal')}
+				><Icon name="book" size={18} /> Journal</a
+			>
 			<button class="nav-link w-full" onclick={() => (searchUi.open = true)}>
 				<Icon name="search" size={18} /> Search
 				<kbd class="ml-auto rounded border border-border px-1.5 text-[10px] text-muted">Ctrl K</kbd>
