@@ -111,6 +111,8 @@ export interface CategoryInput {
 	providerKinds: string[];
 	/** Planned items appear in "Up next" on the home page (on unless turned off) */
 	showUpNext?: boolean;
+	/** Releases of this list's shows, movies and games appear in the Calendar (on unless turned off) */
+	showInCalendar?: boolean;
 }
 
 export function createCategory(userId: number, input: CategoryInput, templateKey: string | null = null) {
@@ -309,7 +311,8 @@ export function updateCategory(userId: number, id: number, input: CategoryInput)
 			color: input.color,
 			statuses: input.statuses,
 			providerKinds: input.providerKinds,
-			...(input.showUpNext !== undefined ? { showUpNext: input.showUpNext } : {})
+			...(input.showUpNext !== undefined ? { showUpNext: input.showUpNext } : {}),
+			...(input.showInCalendar !== undefined ? { showInCalendar: input.showInCalendar } : {})
 		})
 		.where(and(eq(schema.categories.id, id), eq(schema.categories.userId, userId)))
 		.run();

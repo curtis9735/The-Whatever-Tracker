@@ -149,8 +149,8 @@ can see which sources are connected, but can't view or change keys.
 
 | Source            | Gives you                     | How to get access                                                                                                                      | Variables                                       |
 | ----------------- | ----------------------------- | -------------------------------------------------------------------------------------------------------------------------------------- | ----------------------------------------------- |
-| TMDB              | Movies, TV shows              | Free account → [API settings](https://www.themoviedb.org/settings/api)                                                                 | `TMDB_API_KEY` (v3 key or v4 read token)        |
-| IGDB              | Video games                   | [Twitch developer console](https://dev.twitch.tv/console/apps) → register an app                                                       | `IGDB_CLIENT_ID`, `IGDB_CLIENT_SECRET`          |
+| TMDB              | Movies, TV shows, air dates   | Free account → [API settings](https://www.themoviedb.org/settings/api)                                                                 | `TMDB_API_KEY` (v3 key or v4 read token)        |
+| IGDB              | Video games, release dates    | [Twitch developer console](https://dev.twitch.tv/console/apps) → register an app                                                       | `IGDB_CLIENT_ID`, `IGDB_CLIENT_SECRET`          |
 | BoardGameGeek     | Board games                   | [Register an application](https://boardgamegeek.com/applications), then create a token. Approval is manual and can take a week or more | `BGG_API_TOKEN`                                 |
 | MusicBrainz       | Artists, albums (+ cover art) | No key needed, just contact info                                                                                                       | `MUSICBRAINZ_CONTACT` (an email address or URL) |
 | setlist.fm        | Concert setlists              | Free [API key](https://www.setlist.fm/settings/api)                                                                                    | `SETLISTFM_API_KEY`                             |
@@ -183,6 +183,17 @@ list has **TV shows** ticked.
   - **Stats:** how much you logged and on how many days, your busiest day of the week, and your current and
     longest streak.
   - **Activity history:** a calendar heatmap; click any day to see just that day.
+- **Calendar:** **Calendar** in the sidebar (or **Coming up this week** on the home page) shows upcoming
+  releases for the shows, movies and games in your lists.
+  - **What's on it:** TV episode air dates and movie release dates come from TMDB; game release dates come
+    from IGDB. Only items linked to those sources count (added from search, or matched with **Find details
+    on…**), and anything marked Dropped is left out.
+  - **When dates are looked up:** about once a day, right after you add something, and whenever you press
+    **Fetch new releases**.
+  - **Views:** a month grid, or a list by day. On a phone, tap a day to see its releases.
+  - **Lists:** hide a list's releases under **Lists**, or with **Show releases in the Calendar** in that list's
+    settings.
+  - **Download:** saves the coming year as a calendar file (.ics) for Apple, Google or Outlook Calendar.
 - **Logs:** each log has a date, a rating for that time, a place, a price, notes, photos and the list's log
   fields. Logging something that was in a "planned" status (wishlist, to watch) moves it to the first "done"
   status automatically.

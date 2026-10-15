@@ -11,6 +11,7 @@ import {
 	validateSessionToken
 } from '$lib/server/auth';
 import { startBackupScheduler } from '$lib/server/backup';
+import { startReleaseScheduler } from '$lib/server/services/releases';
 
 export const init: ServerInit = async () => {
 	const c = cfg();
@@ -23,6 +24,7 @@ export const init: ServerInit = async () => {
 	}
 	ensureSetupCode();
 	startBackupScheduler();
+	startReleaseScheduler();
 	console.log(`[startup] data directory: ${c.dataDir}`);
 };
 

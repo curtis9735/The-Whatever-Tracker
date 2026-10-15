@@ -14,6 +14,8 @@ export const users = sqliteTable('users', {
 	passwordHash: text('password_hash').notNull(),
 	isAdmin: integer('is_admin', { mode: 'boolean' }).notNull().default(false),
 	onboarded: integer('onboarded', { mode: 'boolean' }).notNull().default(false),
+	/** Last time upcoming releases were looked up for this account */
+	releasesCheckedAt: integer('releases_checked_at', { mode: 'timestamp_ms' }),
 	createdAt: createdAt()
 });
 
@@ -49,6 +51,8 @@ export const categories = sqliteTable(
 		templateKey: text('template_key'),
 		/** Planned items from this list appear in "Up next" on the home page */
 		showUpNext: integer('show_up_next', { mode: 'boolean' }).notNull().default(true),
+		/** Releases of this list's shows, movies and games appear in the Calendar */
+		showInCalendar: integer('show_in_calendar', { mode: 'boolean' }).notNull().default(true),
 		sortOrder: integer('sort_order').notNull().default(0),
 		createdAt: createdAt()
 	},
@@ -194,6 +198,28 @@ export const itemTags = sqliteTable(
 );
 
 /** App-wide settings edited in the UI (e.g. API keys). Values here override the stack's env vars. */
+/** Air and release dates for items linked to TMDB or IGDB (TV episodes, movies, games), for the Calendar */
+export const releases = sqliteTable(
+	'releases',
+	{
+		id: integer('id').primaryKey({ autoIncrement: true }),
+		userId: integer('user_id')
+			.notNull()
+			.references(() => users.id, { onDelete: 'cascade' }),
+		itemId: integer('item_id')
+			.notNull()
+			.references(() => items.id, { onDelete: 'cascade' }),
+		kind: text('kind').$type<'episode' | 'movie' | 'game'>().notNull(),
+		/** YYYY-MM-DD */
+		date: text('date').notNull(),
+		season: integer('season'),
+		episode: integer('episode'),
+		/** Episode name, when there is one */
+		title: text('title')
+	},
+	(t) => [index('releases_user_date_idx').on(t.userId, t.date), index('releases_item_idx').on(t.itemId)]
+);
+
 export const appSettings = sqliteTable('app_settings', {
 	key: text('key').primaryKey(),
 	value: text('value').notNull(),

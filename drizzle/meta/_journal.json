@@ -43,6 +43,13 @@
       "when": 1791946631460,
       "tag": "0005_up_next_setting",
       "breakpoints": true
+    },
+    {
+      "idx": 6,
+      "version": "6",
+      "when": 1792026795784,
+      "tag": "0006_release_calendar",
+      "breakpoints": true
     }
   ]
 }

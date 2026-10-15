@@ -1,5 +1,15 @@
 import type { NormalizedMetadata, SearchResult } from '$lib/types';
 
+/** A dated release for the Calendar: a TV episode airing, a movie or a game coming out */
+export interface ReleaseInput {
+	kind: 'episode' | 'movie' | 'game';
+	/** YYYY-MM-DD */
+	date: string;
+	season?: number;
+	episode?: number;
+	title?: string;
+}
+
 export interface Provider {
 	id: string;
 	label: string;

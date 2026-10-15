@@ -3,8 +3,10 @@
 	import { categoryColor } from '$lib/kinds';
 	import Rating from '$lib/components/Rating.svelte';
 	import Icon from '$lib/components/Icon.svelte';
+	import { weekday } from '$lib/journal';
 
 	let { data } = $props();
+	const WEEKDAY_SHORT = ['Sun', 'Mon', 'Tue', 'Wed', 'Thu', 'Fri', 'Sat'];
 
 	function img(r: {
 		img_kind: 'upload' | 'url_copy' | 'url_link' | null;
@@ -55,6 +57,41 @@
 						<span class="block truncate font-medium">{c.name}</span>
 						<span class="text-xs text-muted">{c.itemCount} {c.itemCount === 1 ? 'item' : 'items'}</span>
 					</span>
+				</a>
+			{/each}
+		</div>
+	</section>
+{/if}
+
+{#if data.comingUp.length}
+	<section class="mb-8">
+		<div class="mb-3 flex items-center justify-between gap-3">
+			<h2 class="section-title">Coming up this week</h2>
+			<a href="/calendar" class="flex items-center gap-1 text-sm text-accent hover:underline">
+				<Icon name="calendar" size={14} /> Calendar
+			</a>
+		</div>
+		<div class="no-scrollbar -mx-4 flex gap-3 overflow-x-auto px-4 pb-1 md:mx-0 md:px-0">
+			{#each data.comingUp as e (e.id)}
+				<a href="/items/{e.itemId}" class="w-28 shrink-0">
+					<div
+						class="relative mb-1 flex aspect-[2/3] items-center justify-center overflow-hidden rounded-xl bg-surface-2 text-3xl"
+					>
+						{#if e.imageUrl}
+							<img src={e.imageUrl} alt="" loading="lazy" class="h-full w-full object-cover" />
+						{:else}
+							<span aria-hidden="true">{e.categoryIcon}</span>
+						{/if}
+						<span
+							class="absolute top-1.5 left-1.5 rounded-md bg-black/70 px-1.5 py-0.5 text-[11px] font-semibold text-white"
+						>
+							{e.date === data.today
+								? 'Today'
+								: `${WEEKDAY_SHORT[weekday(e.date)]} ${Number(e.date.slice(8))}`}
+						</span>
+					</div>
+					<p class="truncate text-sm font-medium">{e.title}</p>
+					<p class="truncate text-xs text-muted">{e.label}{e.episodeTitle ? ` · ${e.episodeTitle}` : ''}</p>
 				</a>
 			{/each}
 		</div>

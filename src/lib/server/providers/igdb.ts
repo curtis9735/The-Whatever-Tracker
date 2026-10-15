@@ -1,6 +1,6 @@
 import { keys } from '../settings';
 import type { NormalizedMetadata, SearchResult } from '$lib/types';
-import type { Provider } from './types';
+import type { Provider, ReleaseInput } from './types';
 import { cached, createLimiter, fetchOk, joinNonEmpty, ProviderError, truncate, withTimeout } from './util';
 
 const DAY = 86_400_000;
@@ -142,6 +142,20 @@ export function normalizeIgdbGame(g: IgdbGame): NormalizedMetadata {
 			.filter(([, v]) => v)
 			.map(([label, value]) => ({ label, value }))
 	};
+}
+
+/** A game's first release date, for the Calendar. Re-checked twice a day. */
+export async function igdbRelease(id: string, signal?: AbortSignal): Promise<ReleaseInput[]> {
+	if (!/^\d+$/.test(id)) throw new Error('Bad IGDB id');
+	const games = await cached(`igdb:release:${id}`, DAY / 2, () =>
+		igdbQuery<{ first_release_date?: number }[]>(
+			'games',
+			`fields first_release_date; where id = ${id};`,
+			signal
+		)
+	);
+	const ts = games[0]?.first_release_date;
+	return ts ? [{ kind: 'game', date: new Date(ts * 1000).toISOString().slice(0, 10) }] : [];
 }
 
 function escapeApicalypse(s: string) {

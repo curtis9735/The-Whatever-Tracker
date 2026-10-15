@@ -7,6 +7,7 @@
 	import IconPicker from '$lib/components/IconPicker.svelte';
 	import { FIELD_TYPES } from '$lib/fields';
 	import { PROVIDER_LABELS } from '$lib/kinds';
+	import { RELEASE_KINDS } from '$lib/calendar';
 	import type { FieldScope, FieldType, StatusGroup } from '$lib/types';
 
 	let { data, form } = $props();
@@ -54,6 +55,10 @@
 	let color = $state(data.category.color);
 	// svelte-ignore state_referenced_locally
 	let showUpNext = $state(data.category.showUpNext);
+	// svelte-ignore state_referenced_locally
+	let showInCalendar = $state(data.category.showInCalendar);
+	/** The list holds shows, movies or games, so its releases can go in the Calendar */
+	const holdsReleases = $derived(picked.some((k) => RELEASE_KINDS.includes(k)));
 	$effect(() => {
 		statuses = data.category.statuses.map((s) => ({ ...s }));
 		nameDraft = data.category.name;
@@ -61,6 +66,7 @@
 		fields = draftsFrom(data.fieldRows);
 		color = data.category.color;
 		showUpNext = data.category.showUpNext;
+		showInCalendar = data.category.showInCalendar;
 	});
 
 	// Extras only make sense for some lists (setlists for music artists); keep any that are on
@@ -333,6 +339,25 @@
 					{/if}
 				</p>
 			</fieldset>
+
+			{#if holdsReleases}
+				<input type="hidden" name="calendar_setting" value="1" />
+				<label class="flex items-start gap-3 text-sm">
+					<input
+						type="checkbox"
+						name="showInCalendar"
+						bind:checked={showInCalendar}
+						class="mt-0.5 h-4 w-4 shrink-0 accent-[var(--accent)]"
+					/>
+					<span>
+						<span class="font-medium">Show releases in the Calendar</span>
+						<span class="block text-xs text-muted">
+							New episodes, movie and game release dates for what's in this list. Also on the
+							<a class="text-accent underline" href="/calendar">Calendar</a> under Lists.
+						</span>
+					</span>
+				</label>
+			{/if}
 
 			{#if extras.length}
 				<fieldset>

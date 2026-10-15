@@ -144,7 +144,9 @@ export const actions: Actions = {
 				color: color in CATEGORY_COLORS ? color : 'slate',
 				statuses,
 				providerKinds,
-				showUpNext: form.get('showUpNext') === 'on'
+				showUpNext: form.get('showUpNext') === 'on',
+				// Only on the page for lists of shows, movies or games; otherwise left as it is
+				showInCalendar: form.has('calendar_setting') ? form.get('showInCalendar') === 'on' : undefined
 			});
 			saveFieldChanges(category.id, fields);
 			return s;

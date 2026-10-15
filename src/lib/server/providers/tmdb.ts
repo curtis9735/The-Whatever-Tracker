@@ -1,6 +1,6 @@
 import { keys } from '../settings';
 import type { NormalizedMetadata, SearchResult } from '$lib/types';
-import type { Provider } from './types';
+import type { Provider, ReleaseInput } from './types';
 import { cached, fetchOk, joinNonEmpty, truncate, withTimeout, yearOf } from './util';
 
 const API = 'https://api.themoviedb.org/3';
@@ -160,6 +160,74 @@ export function normalizeTmdbTv(t: {
 			['TMDB score', t.vote_average ? `${t.vote_average.toFixed(1)}/10` : undefined]
 		])
 	};
+}
+
+// --- Release dates (Calendar) ------------------------------------------------------------
+
+const HOUR = 3_600_000;
+const isDate = (s: unknown): s is string => typeof s === 'string' && /^\d{4}-\d{2}-\d{2}$/.test(s);
+
+interface TmdbEpisode {
+	air_date?: string | null;
+	season_number?: number;
+	episode_number?: number;
+	name?: string;
+}
+
+/** Every episode of a season that has an air date. */
+export function normalizeTmdbSeason(s: { season_number?: number; episodes?: TmdbEpisode[] }): ReleaseInput[] {
+	return (s.episodes ?? [])
+		.filter((e) => isDate(e.air_date))
+		.map((e) => ({
+			kind: 'episode' as const,
+			date: e.air_date as string,
+			season: e.season_number ?? s.season_number,
+			episode: e.episode_number,
+			title: e.name?.trim() || undefined
+		}));
+}
+
+/**
+ * Episodes of the season that aired last and the one airing next (often the same one).
+ * Finished shows are re-checked monthly, running ones twice a day.
+ */
+export async function tmdbTvReleases(id: string, signal?: AbortSignal): Promise<ReleaseInput[]> {
+	if (!/^\d+$/.test(id)) throw new Error('Bad TMDB id');
+	const show = await cached<{
+		status?: string;
+		last_episode_to_air?: TmdbEpisode | null;
+		next_episode_to_air?: TmdbEpisode | null;
+	}>(
+		`tmdb:tv-air:${id}`,
+		(v) => (/ended|canceled/i.test(v.status ?? '') ? 30 * DAY : 12 * HOUR),
+		() => tmdbGet(`/tv/${id}`, {}, signal)
+	);
+	const seasons = new Set<number>();
+	for (const ep of [show.last_episode_to_air, show.next_episode_to_air]) {
+		if (typeof ep?.season_number === 'number') seasons.add(ep.season_number);
+	}
+	const ended = /ended|canceled/i.test(show.status ?? '');
+	const out: ReleaseInput[] = [];
+	for (const n of seasons) {
+		const season = await cached(`tmdb:tv-season:${id}:${n}`, ended ? 30 * DAY : 12 * HOUR, () =>
+			tmdbGet(`/tv/${id}/season/${n}`, {}, signal)
+		);
+		out.push(...normalizeTmdbSeason(season));
+	}
+	return out;
+}
+
+/** A movie's release date. Long-released movies are re-checked monthly. */
+export async function tmdbMovieRelease(id: string, signal?: AbortSignal): Promise<ReleaseInput[]> {
+	if (!/^\d+$/.test(id)) throw new Error('Bad TMDB id');
+	const recent = (d: string) => Date.now() - Date.parse(d) < 60 * DAY;
+	const movie = await cached(
+		`tmdb:movie-release:${id}`,
+		(v: { release_date?: string }) =>
+			isDate(v.release_date) && !recent(v.release_date) ? 30 * DAY : 12 * HOUR,
+		() => tmdbGet(`/movie/${id}`, {}, signal)
+	);
+	return isDate(movie.release_date) ? [{ kind: 'movie', date: movie.release_date }] : [];
 }
 
 export const tmdb: Provider = {

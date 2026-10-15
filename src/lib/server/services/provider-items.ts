@@ -6,6 +6,7 @@ import { ProviderError } from '../providers/util';
 import { getCategoryById } from './categories';
 import { addImage, createItem, getOwnedItem, updateItem } from './items';
 import { addLogWithShow, afterAddPath } from './concerts';
+import { refreshItemReleases } from './releases';
 import { reindexItem } from '../search/local';
 import type { NormalizedMetadata } from '$lib/types';
 
@@ -98,6 +99,7 @@ export async function addFromProvider(userId: number, input: AddFromProviderInpu
 		});
 	}
 	reindexItem(item.id);
+	lookUpReleases(userId, item.id);
 	return {
 		id: item.id,
 		created: true,
@@ -157,7 +159,15 @@ export async function linkToProvider(userId: number, itemId: number, ref: Provid
 	});
 	const art = d.largeImageUrl ?? d.imageUrl;
 	if (art) await addImage(userId, { itemId }, { type: 'url', url: art, linkOnly: true });
+	lookUpReleases(userId, itemId);
 	return d;
+}
+
+/** A new show, movie or game shows up in the Calendar without waiting for the daily look-up. */
+function lookUpReleases(userId: number, itemId: number) {
+	refreshItemReleases(userId, itemId).catch(() => {
+		/* the daily look-up tries again */
+	});
 }
 
 /** Re-pulls provider data. Keeps the user's own title; refreshes description, subtitle and facts. */
