@@ -4,6 +4,8 @@ import { db, rawDb, schema } from '../db';
 import { reindexItem } from '../search/local';
 import { createCategory, createCategoryFromTemplate, listCategories } from '../services/categories';
 import { findExisting } from '../services/provider-items';
+import { insertWatches, watchedEpisodes } from '../services/episodes';
+import { isTrackedShow, PROGRESS_KEYS, validEpisode } from '$lib/episodes';
 import { TEMPLATE_BY_KEY } from '../templates';
 import { toStored } from '$lib/ratings';
 import type { StatusDef, StatusGroup } from '$lib/types';
@@ -67,11 +69,13 @@ export interface PlannedItem {
 	externalUrl: string | null;
 	logs: PlannedLog[];
 	progress: { season: number; episode: number } | null;
+	/** Each episode watched, with the day it was watched when known */
+	episodes: { season: number; episode: number; date: string | null }[];
 }
 
 export interface ImportPlan {
 	items: PlannedItem[];
-	counts: Record<string, { items: number; logs: number }>;
+	counts: Record<string, { items: number; logs: number; episodes: number }>;
 	skipped: number;
 	rows: number;
 }
@@ -166,7 +170,8 @@ export function planYamtrackImport(csv: string): ImportPlan {
 				providerId: mediaId,
 				externalUrl: externalUrl(source, type, mediaId),
 				logs: [],
-				progress: null
+				progress: null,
+				episodes: []
 			};
 			items.set(key, item);
 		}
@@ -180,6 +185,7 @@ export function planYamtrackImport(csv: string): ImportPlan {
 			const e = Number(row.episode_number) || 0;
 			const p = item.progress;
 			if (!p || s > p.season || (s === p.season && e > p.episode)) item.progress = { season: s, episode: e };
+			if (validEpisode(s, e)) item.episodes.push({ season: s, episode: e, date: end || start });
 			continue;
 		}
 
@@ -224,9 +230,10 @@ export function planYamtrackImport(csv: string): ImportPlan {
 			seen.add(k);
 			return true;
 		});
-		const c = (counts[item.mediaType] ??= { items: 0, logs: 0 });
+		const c = (counts[item.mediaType] ??= { items: 0, logs: 0, episodes: 0 });
 		c.items++;
 		c.logs += item.logs.length;
+		c.episodes += new Set(item.episodes.map((e) => `${e.season}:${e.episode}`)).size;
 	}
 	return { items: [...items.values()], counts, skipped, rows: rows.length };
 }
@@ -326,6 +333,7 @@ export function applyYamtrackImport(userId: number, plan: ImportPlan) {
 	let created = 0;
 	let updated = 0;
 	let logsAdded = 0;
+	let episodesAdded = 0;
 	const touched: number[] = [];
 
 	db().transaction(() => {
@@ -334,12 +342,16 @@ export function applyYamtrackImport(userId: number, plan: ImportPlan) {
 			const statuses = statusesFor.get(categoryId) ?? [];
 			const status = mapStatus(statuses, p.status);
 			const existingId = findExisting(userId, p.provider, p.providerKind, p.providerId);
+			const tracked = isTrackedShow(p);
 			let itemId: number;
 
 			if (existingId) {
 				const cur = db().select().from(schema.items).where(eq(schema.items.id, existingId)).get()!;
 				const custom = { ...cur.custom };
-				if (p.progress) {
+				if (tracked) {
+					// Shows linked to TMDB get their episodes below; old saved progress is replaced by them
+					if (p.episodes.length) for (const k of PROGRESS_KEYS) delete custom[k];
+				} else if (p.progress) {
 					custom.current_season = p.progress.season;
 					custom.current_episode = p.progress.episode;
 				}
@@ -358,7 +370,7 @@ export function applyYamtrackImport(userId: number, plan: ImportPlan) {
 				updated++;
 			} else {
 				const custom: Record<string, unknown> = {};
-				if (p.progress) {
+				if (p.progress && !tracked) {
 					custom.current_season = p.progress.season;
 					custom.current_episode = p.progress.episode;
 				}
@@ -405,6 +417,7 @@ export function applyYamtrackImport(userId: number, plan: ImportPlan) {
 					.run();
 				logsAdded++;
 			}
+			if (tracked) episodesAdded += importEpisodes(userId, itemId, p.episodes);
 			rawDb()
 				.prepare(
 					'UPDATE items SET last_logged_at = (SELECT MAX(date) FROM item_logs WHERE item_id = ?) WHERE id = ?'
@@ -415,5 +428,24 @@ export function applyYamtrackImport(userId: number, plan: ImportPlan) {
 	});
 
 	for (const id of touched) reindexItem(id);
-	return { created, updated, logsAdded, createdCategories };
+	return { created, updated, logsAdded, episodesAdded, createdCategories };
+}
+
+/**
+ * Episodes watched become plays dated when they were watched (rewatches too). Episodes the show
+ * already has plays for are skipped, so importing the same file again adds nothing.
+ */
+function importEpisodes(userId: number, itemId: number, episodes: PlannedItem['episodes']) {
+	const have = new Set(watchedEpisodes(itemId).map((w) => `${w.season}:${w.episode}`));
+	const plays = new Map<string, { season: number; episode: number; watchedAt: string | null }>();
+	for (const e of episodes) {
+		const key = `${e.season}:${e.episode}`;
+		if (!have.has(key))
+			plays.set(`${key}:${e.date ?? ''}`, { season: e.season, episode: e.episode, watchedAt: e.date });
+	}
+	const ordered = [...plays.values()].sort(
+		(a, b) =>
+			(a.watchedAt ?? '').localeCompare(b.watchedAt ?? '') || a.season - b.season || a.episode - b.episode
+	);
+	return insertWatches(userId, itemId, ordered, { onlyNew: false });
 }

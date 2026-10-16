@@ -42,19 +42,25 @@ export function createLimiter(minIntervalMs: number) {
 
 const inflight = new Map<string, Promise<unknown>>();
 
+/** How long an expired answer is served again after the source fails, before retrying */
+const STALE_RETRY_MS = 15 * 60_000;
+
 /**
  * SQLite-backed response cache; concurrent identical requests share one upstream call.
- * `ttl` can depend on the answer (e.g. cache empty results briefly).
+ * `ttl` can depend on the answer (e.g. cache empty results briefly). With `staleIfError`, the saved
+ * answer (even an expired one) is used when the source is down, slow or refuses the key.
  */
 export async function cached<T>(
 	key: string,
 	ttl: number | ((value: T) => number),
-	fn: () => Promise<T>
+	fn: () => Promise<T>,
+	opts: { staleIfError?: boolean; force?: boolean } = {}
 ): Promise<T> {
 	const sqlite = rawDb();
 	const row = sqlite.prepare('SELECT value, expires_at FROM provider_cache WHERE key = ?').get(key) as
 		{ value: string; expires_at: number } | undefined;
-	if (row && row.expires_at > Date.now()) return JSON.parse(row.value) as T;
+	// `force` asks the source even when the saved answer is still current
+	if (row && row.expires_at > Date.now() && !opts.force) return JSON.parse(row.value) as T;
 
 	const pending = inflight.get(key);
 	if (pending) return pending as Promise<T>;
@@ -65,6 +71,15 @@ export async function cached<T>(
 				.prepare('INSERT OR REPLACE INTO provider_cache (key, value, expires_at) VALUES (?, ?, ?)')
 				.run(key, JSON.stringify(value), Date.now() + (typeof ttl === 'function' ? ttl(value) : ttl));
 			return value;
+		} catch (e) {
+			const outage =
+				(e instanceof ProviderError && e.code !== 'notfound') || (e as Error).name === 'TimeoutError';
+			// A forced ask wants TMDB's answer now: an outage is reported, not covered up
+			if (!opts.staleIfError || opts.force || !row || !outage) throw e;
+			sqlite
+				.prepare('UPDATE provider_cache SET expires_at = ? WHERE key = ?')
+				.run(Date.now() + STALE_RETRY_MS, key);
+			return JSON.parse(row.value) as T;
 		} finally {
 			inflight.delete(key);
 		}
@@ -73,8 +88,17 @@ export async function cached<T>(
 	return p;
 }
 
+/** TV show and season answers back up the episode tracker when TMDB is down, so they are kept longer */
+const KEEP_STALE_MS = 120 * 86_400_000;
+
 export function pruneProviderCache() {
-	rawDb().prepare('DELETE FROM provider_cache WHERE expires_at < ?').run(Date.now());
+	const now = Date.now();
+	rawDb()
+		.prepare(
+			`DELETE FROM provider_cache WHERE expires_at < ?
+			 AND (expires_at < ? OR NOT (key LIKE 'tmdb:tv-air:%' OR key LIKE 'tmdb:tv-season:%'))`
+		)
+		.run(now, now - KEEP_STALE_MS);
 }
 
 export function withTimeout(signal: AbortSignal | undefined, ms: number) {

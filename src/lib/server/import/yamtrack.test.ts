@@ -48,10 +48,15 @@ describe('planYamtrackImport', () => {
 		expect(dune.image).toMatch(/^https:/);
 	});
 
-	it('makes seasons into logs and episodes into progress', () => {
+	it('makes seasons into logs and keeps each episode watched, with its date', () => {
 		const got = byKey['tmdb:tv:1399'];
 		expect(got.logs.map((l) => l.notes)).toEqual([null, 'Season 1', 'Season 2 (started)']);
 		expect(got.progress).toEqual({ season: 2, episode: 7 });
+		expect(got.episodes).toEqual([
+			{ season: 2, episode: 3, date: '2019-02-05' },
+			{ season: 2, episode: 7, date: '2019-02-09' },
+			{ season: 1, episode: 10, date: '2019-01-20' }
+		]);
 		expect(got.status).toBe('Completed');
 	});
 
@@ -62,8 +67,8 @@ describe('planYamtrackImport', () => {
 	});
 
 	it('counts per media type', () => {
-		expect(plan.counts.tv).toEqual({ items: 1, logs: 3 });
-		expect(plan.counts.movie).toEqual({ items: 1, logs: 2 });
+		expect(plan.counts.tv).toEqual({ items: 1, logs: 3, episodes: 3 });
+		expect(plan.counts.movie).toEqual({ items: 1, logs: 2, episodes: 0 });
 	});
 
 	it('rejects files that are not Yamtrack exports', () => {

@@ -6,6 +6,7 @@ import { deleteStoredFiles, storeImageFromUrl, storeUploadedFile, type StoredIma
 import { getCategoryById } from './categories';
 import type { Image, Item } from '../db/schema';
 import type { StatusDef } from '$lib/types';
+import { EPISODE_ORDER, parseLogEpisodes } from '$lib/episodes';
 
 export interface ItemInput {
 	categoryId: number;
@@ -178,13 +179,27 @@ export function getItemDetail(userId: number, itemId: number) {
 				.all()
 		: [];
 	const cover = itemImages.find((i) => i.id === item.coverImageId) ?? itemImages[0] ?? null;
+	const episodes = new Map(
+		(
+			rawDb()
+				.prepare(
+					`SELECT l.id, ${logEpisodesSql('l')} AS ep FROM item_logs l
+					 WHERE l.item_id = ? AND EXISTS (SELECT 1 FROM episode_watches w WHERE w.log_id = l.id)`
+				)
+				.all(itemId) as { id: number; ep: string }[]
+		).map((r) => [r.id, parseLogEpisodes(r.ep)])
+	);
 	return {
 		item,
 		...cat,
 		tags: getItemTags(itemId),
 		images: itemImages,
 		cover,
-		logs: logs.map((l) => ({ ...l, images: logImages.filter((i) => i.logId === l.id) }))
+		logs: logs.map((l) => ({
+			...l,
+			images: logImages.filter((i) => i.logId === l.id),
+			episodes: episodes.get(l.id) ?? null
+		}))
 	};
 }
 
@@ -321,27 +336,44 @@ export function firstDoneStatus(statuses: StatusDef[]) {
 	return statuses.find((s) => s.group === 'done')?.key ?? null;
 }
 
-export function addLog(userId: number, itemId: number, input: LogInput, statuses: StatusDef[]) {
+export interface LogOptions {
+	/** Move a planned item to the first "done" status (off for episode check-ins, which set it themselves) */
+	promote?: boolean;
+	/** Runs in the same transaction as the log write (e.g. saving which episode the log is for) */
+	withLog?: (logId: number) => void;
+}
+
+export function addLog(
+	userId: number,
+	itemId: number,
+	input: LogInput,
+	statuses: StatusDef[],
+	{ promote = true, withLog }: LogOptions = {}
+) {
 	const item = getOwnedItem(userId, itemId);
-	const log = db()
-		.insert(schema.itemLogs)
-		.values({
-			itemId,
-			userId,
-			date: input.date,
-			rating: input.rating ?? null,
-			notes: input.notes || null,
-			location: input.location || null,
-			price: input.price ?? null,
-			custom: input.custom ?? {},
-			external: input.external ?? null
-		})
-		.returning()
-		.get();
+	const log = db().transaction(() => {
+		const row = db()
+			.insert(schema.itemLogs)
+			.values({
+				itemId,
+				userId,
+				date: input.date,
+				rating: input.rating ?? null,
+				notes: input.notes || null,
+				location: input.location || null,
+				price: input.price ?? null,
+				custom: input.custom ?? {},
+				external: input.external ?? null
+			})
+			.returning()
+			.get();
+		withLog?.(row.id);
+		return row;
+	});
 
 	const patch: Partial<Item> = { updatedAt: new Date() };
 	const group = statuses.find((s) => s.key === item.status)?.group;
-	if (!item.status || group === 'planned') {
+	if (promote && (!item.status || group === 'planned')) {
 		const done = firstDoneStatus(statuses);
 		if (done) patch.status = done;
 	}
@@ -351,21 +383,29 @@ export function addLog(userId: number, itemId: number, input: LogInput, statuses
 	return log;
 }
 
-export function updateLog(userId: number, logId: number, input: LogInput) {
+export function updateLog(
+	userId: number,
+	logId: number,
+	input: LogInput,
+	{ withLog }: Pick<LogOptions, 'withLog'> = {}
+) {
 	const log = getOwnedLog(userId, logId);
-	db()
-		.update(schema.itemLogs)
-		.set({
-			date: input.date,
-			rating: input.rating ?? null,
-			notes: input.notes || null,
-			location: input.location || null,
-			price: input.price ?? null,
-			custom: input.custom ?? {},
-			...(input.external !== undefined ? { external: input.external } : {})
-		})
-		.where(eq(schema.itemLogs.id, logId))
-		.run();
+	db().transaction(() => {
+		db()
+			.update(schema.itemLogs)
+			.set({
+				date: input.date,
+				rating: input.rating ?? null,
+				notes: input.notes || null,
+				location: input.location || null,
+				price: input.price ?? null,
+				custom: input.custom ?? {},
+				...(input.external !== undefined ? { external: input.external } : {})
+			})
+			.where(eq(schema.itemLogs.id, logId))
+			.run();
+		withLog?.(logId);
+	});
 	refreshLastLogged(log.itemId);
 	reindexItem(log.itemId);
 	return log;
@@ -381,7 +421,12 @@ export async function deleteLog(userId: number, logId: number) {
 	return log;
 }
 
-function refreshLastLogged(itemId: number) {
+/** `[count, first, last, title]` of the episodes a log is for, read with parseLogEpisodes */
+export const logEpisodesSql = (log: string) =>
+	`(SELECT json_array(COUNT(*), MIN(w.season * ${EPISODE_ORDER} + w.episode),
+		MAX(w.season * ${EPISODE_ORDER} + w.episode), MAX(w.title)) FROM episode_watches w WHERE w.log_id = ${log}.id)`;
+
+export function refreshLastLogged(itemId: number) {
 	rawDb()
 		.prepare(
 			'UPDATE items SET last_logged_at = (SELECT MAX(date) FROM item_logs WHERE item_id = ?) WHERE id = ?'
@@ -462,7 +507,12 @@ export function listItems(userId: number, categoryId: number, statuses: StatusDe
 		.prepare(
 			`SELECT i.id, i.title, i.subtitle, i.status, i.rating, i.favorite, i.custom, i.last_logged_at,
 				im.kind AS img_kind, im.path AS img_path, im.thumb_path AS img_thumb, im.source_url AS img_source,
-				(SELECT COUNT(*) FROM item_logs l WHERE l.item_id = i.id) AS log_count
+				(SELECT COUNT(*) FROM item_logs l WHERE l.item_id = i.id) AS log_count,
+				-- Shows linked to TMDB: the furthest episode watched is their progress
+				CASE WHEN i.provider = 'tmdb' AND i.provider_kind = 'tv' THEN
+					(SELECT w.season * ${EPISODE_ORDER} + w.episode FROM episode_watches w
+					 WHERE w.item_id = i.id AND w.season > 0 ORDER BY w.season DESC, w.episode DESC LIMIT 1)
+				END AS furthest
 			 FROM items i LEFT JOIN images im ON im.id = i.cover_image_id
 			 WHERE ${where.join(' AND ')}
 			 ORDER BY ${order}
@@ -486,6 +536,7 @@ interface ListRow {
 	img_thumb: string | null;
 	img_source: string | null;
 	log_count: number;
+	furthest: number | null;
 }
 
 function mapListRow(r: ListRow) {
@@ -494,6 +545,10 @@ function mapListRow(r: ListRow) {
 		custom = JSON.parse(r.custom);
 	} catch {
 		/* keep empty */
+	}
+	if (r.furthest !== null) {
+		custom.current_season = Math.floor(r.furthest / EPISODE_ORDER);
+		custom.current_episode = r.furthest % EPISODE_ORDER;
 	}
 	return {
 		id: r.id,
@@ -518,7 +573,7 @@ export type ListItem = ReturnType<typeof mapListRow>;
 export function recentActivity(userId: number, limit = 15) {
 	return rawDb()
 		.prepare(
-			`SELECT l.id AS log_id, l.date, l.rating AS log_rating, l.notes, l.location,
+			`SELECT l.id AS log_id, l.date, l.rating AS log_rating, l.notes, l.location, ${logEpisodesSql('l')} AS ep,
 				i.id AS item_id, i.title, c.name AS category_name, c.icon AS category_icon,
 				im.kind AS img_kind, im.path AS img_path, im.thumb_path AS img_thumb, im.source_url AS img_source
 			 FROM item_logs l
@@ -535,6 +590,7 @@ export function recentActivity(userId: number, limit = 15) {
 		log_rating: number | null;
 		notes: string | null;
 		location: string | null;
+		ep: string;
 		item_id: number;
 		title: string;
 		category_name: string;

@@ -1,4 +1,6 @@
 import { rawDb } from '../db';
+import { logEpisodesSql } from './items';
+import { logEpisodeLabel, parseLogEpisodes } from '$lib/episodes';
 import { imageSrc, type ImageRef } from '$lib/images';
 import { heatmap, journalStats, type DateRange } from '$lib/journal';
 import type { SetlistEvent } from '$lib/types';
@@ -10,6 +12,8 @@ export interface JournalEntry {
 	location: string | null;
 	notes: string | null;
 	setlistSongs: number | null;
+	/** "S2 E5 · Title" for an episode check-in */
+	episode: string | null;
 	itemId: number;
 	title: string;
 	subtitle: string | null;
@@ -63,7 +67,7 @@ export function journal(
 
 	const rows = sqlite
 		.prepare(
-			`SELECT l.id, l.date, l.rating, l.location, l.notes, l.external,
+			`SELECT l.id, l.date, l.rating, l.location, l.notes, l.external, ${logEpisodesSql('l')} AS ep,
 				i.id AS item_id, i.title, i.subtitle,
 				c.name AS category_name, c.icon AS category_icon, c.color AS category_color,
 				im.kind AS img_kind, im.path AS img_path, im.thumb_path AS img_thumb, im.source_url AS img_source
@@ -82,6 +86,7 @@ export function journal(
 		location: string | null;
 		notes: string | null;
 		external: string | null;
+		ep: string;
 		item_id: number;
 		title: string;
 		subtitle: string | null;
@@ -109,6 +114,7 @@ export function journal(
 			location: r.location,
 			notes: r.notes,
 			setlistSongs,
+			episode: logEpisodeLabel(parseLogEpisodes(r.ep)),
 			itemId: r.item_id,
 			title: r.title,
 			subtitle: r.subtitle,

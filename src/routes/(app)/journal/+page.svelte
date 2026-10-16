@@ -187,6 +187,7 @@
 									<span class="h-1.5 w-1.5 rounded-full bg-current"></span>
 									{e.categoryName}
 								</p>
+								{#if e.episode}<p class="truncate text-sm">{e.episode}</p>{/if}
 								{#if e.rating !== null}<Rating value={e.rating} class="text-sm" />{/if}
 								{#if e.location}
 									<p class="flex items-center gap-1 truncate text-xs text-muted">

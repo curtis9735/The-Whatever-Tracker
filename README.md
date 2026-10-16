@@ -194,6 +194,33 @@ list has **TV shows** ticked.
   - **Lists:** hide a list's releases under **Lists**, or with **Show releases in the Calendar** in that list's
     settings.
   - **Download:** saves the coming year as a calendar file (.ics) for Apple, Google or Outlook Calendar.
+- **TV episodes:** shows linked to TMDB (added from search, or matched with **Find details on…**) are tracked
+  episode by episode, the way Trakt does it. Episode names and air dates come from TMDB, so you can only pick
+  episodes that exist.
+  - **Adding a show:** after picking the TMDB match, choose **Your progress**: **Haven't started**, **Watched
+    some** (then pick the last season and episode you watched, by name), or **Caught up**. Everything up to that
+    point is marked watched. Choosing progress moves a Planning show to Watching, and choosing Completed picks
+    **Caught up** for you.
+  - **On the show's page:** a progress bar ("44 of 186 watched") and the **Next episode** with a one-tap
+    **Check in**, which logs it for today. After a check-in you get **Rate it** and **Undo**. **Other date, rating
+    or notes** opens the full log form for that episode.
+  - **Seasons:** each season opens to its episodes, each with a check mark. Tap one to check it in **Today**,
+    **When it aired**, on **Another date**, or **Don't remember** (marked watched, with no log). Tap a watched
+    episode to see each time you watched it, remove one, or **Watch again**. **Mark season watched** does a whole
+    season at once. With a date, the season becomes a single history entry ("Season 2 · 10 episodes").
+    **Unmark season** takes back the episodes marked without a date, and keeps check-ins that have a log.
+  - **Logs:** **Add log** on a show has a season and episode picker, set to the next episode, plus "No particular
+    episode". A log's edit page can change its episode. Deleting a check-in's log un-watches that episode. The
+    history, the Journal and Recent activity show "S2 E5 · Episode name".
+  - **Status:** checking in an episode moves a Planning show to Watching, and a Completed or Dropped show back to
+    Watching. Checking in the last episode of a show that has ended marks it Completed. Setting a show to
+    Completed offers to mark the episodes you haven't checked in.
+  - **Cards** show progress as "S3 E5" (the furthest episode watched). Specials appear on the show's page but
+    don't count toward progress.
+  - **Shows added before v0.6.0** with a typed-in current season and episode get those episodes marked watched
+    the first time you open them. A Yamtrack import marks each episode watched on the day you watched it.
+  - **If TMDB can't be reached**, the page still loads and shows what you've watched, using TMDB's last answer
+    when there is one.
 - **Logs:** each log has a date, a rating for that time, a place, a price, notes, photos and the list's log
   fields. Logging something that was in a "planned" status (wishlist, to watch) moves it to the first "done"
   status automatically.
@@ -247,7 +274,8 @@ list has **TV shows** ticked.
     sheet updates what's there instead of duplicating it. Empty cells never erase anything, a blank status
     cell never downgrades an item, and the same date is never logged twice.
 - **Yamtrack import:** in Yamtrack, export to CSV, then go to **Me → Import from Yamtrack**. You see a preview
-  before anything is saved, and re-importing the same file doesn't create duplicates.
+  before anything is saved, and re-importing the same file doesn't create duplicates. Seasons become logs, and
+  episodes of TMDB shows are marked watched with the day you watched them.
 
 ---
 

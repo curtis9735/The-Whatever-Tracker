@@ -6,6 +6,8 @@
 	import ItemForm from '$lib/components/ItemForm.svelte';
 	import LogFields from '$lib/components/LogFields.svelte';
 	import MetadataMatch from '$lib/components/MetadataMatch.svelte';
+	import ShowProgress from '$lib/components/ShowProgress.svelte';
+	import { PROGRESS_KEYS } from '$lib/episodes';
 	import { KIND_BY_KEY, PROVIDER_LABELS, SETLIST_SOURCE } from '$lib/kinds';
 	import { isFinished } from '$lib/status';
 	import type { SearchResult } from '$lib/types';
@@ -32,6 +34,12 @@
 					.map((k) => PROVIDER_LABELS[k.split(':')[0]])
 			)
 		].join(' and ')
+	);
+
+	// A show from TMDB: progress is picked from its real episodes instead of typed in
+	const tvMatch = $derived(match?.provider === 'tmdb' && match.kind === 'tv' ? match : null);
+	const formFields = $derived(
+		tvMatch ? data.chosen.itemFields.filter((f) => !PROGRESS_KEYS.includes(f.key)) : data.chosen.itemFields
 	);
 
 	function onMatch(r: SearchResult | null) {
@@ -102,7 +110,7 @@
 		{#key cat.id}
 			<ItemForm
 				category={cat}
-				itemFields={data.chosen.itemFields}
+				itemFields={formFields}
 				allTags={data.allTags}
 				bind:title
 				bind:status
@@ -119,6 +127,9 @@
 					{/if}
 				{/snippet}
 				{#snippet afterStatus()}
+					{#if tvMatch}
+						<ShowProgress tmdbId={tvMatch.id} statuses={cat.statuses} bind:status />
+					{/if}
 					{#if finished}
 						<!-- A finished status means it already happened: record when as the first log -->
 						<div class="space-y-3 rounded-xl border border-border bg-surface-2/50 p-3">

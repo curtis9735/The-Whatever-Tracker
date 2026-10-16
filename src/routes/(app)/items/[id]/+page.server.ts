@@ -1,4 +1,4 @@
-import { error, fail, redirect } from '@sveltejs/kit';
+import { error, fail, isHttpError, redirect } from '@sveltejs/kit';
 import {
 	addImage,
 	addLog,
@@ -24,10 +24,26 @@ import {
 	parseMatch,
 	refreshMetadata
 } from '$lib/server/services/provider-items';
-import { parseLogForm, todayIso } from '$lib/server/forms';
+import { parseEpisodePick, parseLogForm, todayIso } from '$lib/server/forms';
 import { ImageError } from '$lib/server/images/store';
 import { canFindSetlists } from '$lib/server/services/concerts';
 import { parseRatingInput } from '$lib/ratings';
+import { isTrackedShow } from '$lib/episodes';
+import { isIsoDate } from '$lib/journal';
+import {
+	EpisodeError,
+	loadTracker,
+	markRemaining,
+	markSeason,
+	removePlay,
+	restorePlays,
+	tmdbProblem,
+	trackedShow,
+	unmarkSeason,
+	unwatchEpisode,
+	watchEpisode,
+	type UndatedPlay
+} from '$lib/server/services/episodes';
 import type { Actions, PageServerLoad } from './$types';
 
 function itemId(params: { id: string }) {
@@ -38,13 +54,53 @@ function itemId(params: { id: string }) {
 
 export const load: PageServerLoad = async ({ locals, params, url }) => {
 	const detail = getItemDetail(locals.user!.id, itemId(params));
+	const today = todayIso();
+	const tracked = isTrackedShow(detail.item);
 	return {
 		...detail,
-		today: todayIso(),
+		today,
+		tracked,
+		// Episodes come from TMDB: streamed, so the rest of the page never waits for it
+		tracker: tracked
+			? loadTracker(locals.user!.id, trackedShow(locals.user!.id, detail.item.id), today)
+			: null,
 		canSetlist: canFindSetlists(detail.item, detail.category),
 		warn: url.searchParams.get('warn')
 	};
 };
+
+/** "When did you watch it?": today, another day (a log with that date), or not known (no log) */
+function whenLog(form: FormData, today: string): { date: string } | null | 'invalid' {
+	const when = String(form.get('when') ?? 'today');
+	if (when === 'unknown') return null;
+	if (when === 'date') {
+		const date = String(form.get('date') ?? '');
+		return isIsoDate(date) ? { date } : 'invalid';
+	}
+	return { date: today };
+}
+
+/**
+ * Undo of a check-in also takes back the status change it made (`status_set`, from `status_was`),
+ * unless the status has been changed since.
+ */
+function revertStatus(userId: number, id: number, form: FormData) {
+	if (!form.has('status_set')) return;
+	const item = getOwnedItem(userId, id);
+	if (item.status !== String(form.get('status_set'))) return;
+	const was = String(form.get('status_was') ?? '');
+	const { category } = getCategoryById(userId, item.categoryId);
+	if (was && !category.statuses.some((s) => s.key === was)) return;
+	updateItem(userId, item.id, { status: was || null });
+}
+
+function episodeFailure(e: unknown) {
+	if (e instanceof EpisodeError) return fail(400, { episodeError: e.message });
+	if (e instanceof ProviderError || (e as Error).name === 'TimeoutError') {
+		return fail(502, { episodeError: tmdbProblem(e) });
+	}
+	throw e;
+}
 
 async function saveImages(
 	userId: number,
@@ -95,9 +151,117 @@ export const actions: Actions = {
 		const form = await request.formData();
 		const parsed = parseLogForm(form, category, logFields);
 		if (!parsed.ok) return fail(400, { logError: parsed.error });
-		const log = addLog(userId, item.id, parsed.data, category.statuses);
-		const warnings = await saveImages(userId, { logId: log.id }, form, 'logimg_');
-		return { logAdded: true, warning: warnings[0] ?? null };
+		// Shows linked to TMDB: the log can be for an episode
+		const pick = isTrackedShow(item) ? parseEpisodePick(form) : null;
+		if (pick === 'invalid') return fail(400, { logError: 'Pick a season and episode.' });
+		let logId: number;
+		let checkedIn = null;
+		if (pick) {
+			try {
+				checkedIn = await watchEpisode(userId, item.id, pick, parsed.data, todayIso());
+			} catch (e) {
+				if (e instanceof EpisodeError) return fail(400, { logError: e.message });
+				throw e;
+			}
+			logId = checkedIn.logId!;
+		} else {
+			logId = addLog(userId, item.id, parsed.data, category.statuses).id;
+		}
+		const warnings = checkedIn?.duplicate ? [] : await saveImages(userId, { logId }, form, 'logimg_');
+		return { logAdded: true, checkedIn, warning: warnings[0] ?? null };
+	},
+
+	/** One episode: today, another day, or "don't remember when" (marked watched, no log) */
+	checkIn: async ({ request, locals, params }) => {
+		const userId = locals.user!.id;
+		const form = await request.formData();
+		const today = todayIso();
+		const log = whenLog(form, today);
+		if (log === 'invalid') return fail(400, { episodeError: 'Pick a valid date.' });
+		const pick = { season: Number(form.get('season')), episode: Number(form.get('episode')) };
+		try {
+			return { checkedIn: await watchEpisode(userId, itemId(params), pick, log, today, { quick: true }) };
+		} catch (e) {
+			return episodeFailure(e);
+		}
+	},
+
+	/** Every aired episode of a season not watched yet; with a date, as one log */
+	markSeason: async ({ request, locals, params }) => {
+		const form = await request.formData();
+		const today = todayIso();
+		const log = whenLog(form, today);
+		if (log === 'invalid') return fail(400, { episodeError: 'Pick a valid date.' });
+		const season = Number(form.get('season'));
+		try {
+			const r = await markSeason(locals.user!.id, itemId(params), season, log, today);
+			return { marked: { season, ...r } };
+		} catch (e) {
+			return episodeFailure(e);
+		}
+	},
+
+	/** Every aired episode not watched yet, without a date (e.g. after setting the show to Completed) */
+	markRemaining: async ({ locals, params }) => {
+		try {
+			const r = await markRemaining(locals.user!.id, itemId(params), todayIso());
+			return { marked: { season: null, ...r } };
+		} catch (e) {
+			return episodeFailure(e);
+		}
+	},
+
+	/** Un-watches an episode's plays that have no log; returns them for Undo */
+	unwatch: async ({ request, locals, params }) => {
+		const form = await request.formData();
+		const season = Number(form.get('season'));
+		const episode = Number(form.get('episode'));
+		const r = unwatchEpisode(locals.user!.id, itemId(params), season, episode);
+		return { unwatched: { season, episode, ...r } };
+	},
+
+	/** Undo for unwatch */
+	restore: async ({ request, locals, params }) => {
+		const form = await request.formData();
+		let plays: UndatedPlay[] = [];
+		try {
+			const raw = JSON.parse(String(form.get('plays') ?? '[]')) as unknown[];
+			plays = raw.map((p) => {
+				const { id, title, watchedAt, createdAt } = (p ?? {}) as Record<string, unknown>;
+				const whole = (n: unknown) => (Number.isSafeInteger(n) && (n as number) > 0 ? (n as number) : null);
+				return {
+					id: whole(id),
+					title: typeof title === 'string' ? title.slice(0, 300) : null,
+					watchedAt: typeof watchedAt === 'string' && isIsoDate(watchedAt) ? watchedAt : null,
+					createdAt: whole(createdAt)
+				};
+			});
+		} catch {
+			return fail(400, { episodeError: 'Nothing to put back.' });
+		}
+		restorePlays(
+			locals.user!.id,
+			itemId(params),
+			Number(form.get('season')),
+			Number(form.get('episode')),
+			plays
+		);
+	},
+
+	unmarkSeason: async ({ request, locals, params }) => {
+		const season = Number((await request.formData()).get('season'));
+		const r = unmarkSeason(locals.user!.id, itemId(params), season);
+		return { unmarked: { season, ...r } };
+	},
+
+	/** One play; a check-in goes with its log */
+	removePlay: async ({ request, locals, params }) => {
+		const userId = locals.user!.id;
+		trackedShow(userId, itemId(params));
+		const form = await request.formData();
+		await removePlay(userId, Number(form.get('watchId')), itemId(params));
+		revertStatus(userId, itemId(params), form);
+		return { removedPlay: true };
 	},
 
 	/** Re-fetches a log's setlist from setlist.fm (songs are often added in the days after a show). */
@@ -117,9 +281,16 @@ export const actions: Actions = {
 		}
 	},
 
-	deleteLog: async ({ request, locals }) => {
-		const logId = Number((await request.formData()).get('logId'));
-		await deleteLog(locals.user!.id, logId);
+	deleteLog: async ({ request, locals, params }) => {
+		const userId = locals.user!.id;
+		const form = await request.formData();
+		try {
+			await deleteLog(userId, Number(form.get('logId')));
+		} catch (e) {
+			// Already deleted (a second tap on Undo)
+			if (!isHttpError(e, 404)) throw e;
+		}
+		revertStatus(userId, itemId(params), form);
 	},
 
 	addImages: async ({ request, locals, params }) => {

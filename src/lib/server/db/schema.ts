@@ -197,7 +197,37 @@ export const itemTags = sqliteTable(
 	(t) => [primaryKey({ columns: [t.itemId, t.tagId] }), index('item_tags_tag_idx').on(t.tagId)]
 );
 
-/** App-wide settings edited in the UI (e.g. API keys). Values here override the stack's env vars. */
+/**
+ * Episodes watched of a show linked to TMDB: one row per play. A check-in made with a date has a log
+ * (the date, rating and notes live there); "mark watched" without a date has none.
+ */
+export const episodeWatches = sqliteTable(
+	'episode_watches',
+	{
+		id: integer('id').primaryKey({ autoIncrement: true }),
+		userId: integer('user_id')
+			.notNull()
+			.references(() => users.id, { onDelete: 'cascade' }),
+		itemId: integer('item_id')
+			.notNull()
+			.references(() => items.id, { onDelete: 'cascade' }),
+		/** Deleting the log un-watches its episodes */
+		logId: integer('log_id').references(() => itemLogs.id, { onDelete: 'cascade' }),
+		/** 0 is TMDB's "Specials" */
+		season: integer('season').notNull(),
+		episode: integer('episode').notNull(),
+		/** Episode name when it was watched */
+		title: text('title'),
+		/** YYYY-MM-DD, for plays without a log that still have a date (imported history) */
+		watchedAt: text('watched_at'),
+		createdAt: createdAt()
+	},
+	(t) => [
+		index('episode_watches_item_idx').on(t.itemId, t.season, t.episode),
+		index('episode_watches_log_idx').on(t.logId)
+	]
+);
+
 /** Air and release dates for items linked to TMDB or IGDB (TV episodes, movies, games), for the Calendar */
 export const releases = sqliteTable(
 	'releases',
@@ -220,6 +250,7 @@ export const releases = sqliteTable(
 	(t) => [index('releases_user_date_idx').on(t.userId, t.date), index('releases_item_idx').on(t.itemId)]
 );
 
+/** App-wide settings edited in the UI (e.g. API keys). Values here override the stack's env vars. */
 export const appSettings = sqliteTable('app_settings', {
 	key: text('key').primaryKey(),
 	value: text('value').notNull(),
@@ -241,3 +272,4 @@ export type FieldDefinition = typeof fieldDefinitions.$inferSelect;
 export type Item = typeof items.$inferSelect;
 export type ItemLog = typeof itemLogs.$inferSelect;
 export type Image = typeof images.$inferSelect;
+export type EpisodeWatch = typeof episodeWatches.$inferSelect;

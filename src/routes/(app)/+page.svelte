@@ -4,6 +4,7 @@
 	import Rating from '$lib/components/Rating.svelte';
 	import Icon from '$lib/components/Icon.svelte';
 	import { weekday } from '$lib/journal';
+	import { logEpisodeLabel, parseLogEpisodes } from '$lib/episodes';
 
 	let { data } = $props();
 	const WEEKDAY_SHORT = ['Sun', 'Mon', 'Tue', 'Wed', 'Thu', 'Fri', 'Sat'];
@@ -22,6 +23,12 @@
 	function prettyDate(d: string) {
 		const date = new Date(`${d}T00:00:00`);
 		return date.toLocaleDateString(undefined, { month: 'short', day: 'numeric', year: 'numeric' });
+	}
+
+	/** " · S2 E5 · Title" for an episode check-in */
+	function episodeLabel(ep: string) {
+		const label = logEpisodeLabel(parseLogEpisodes(ep));
+		return label ? ` · ${label}` : '';
 	}
 
 	const greeting = (() => {
@@ -134,7 +141,9 @@
 							<p class="truncate font-medium">{a.title}</p>
 							<p class="truncate text-xs text-muted">
 								{a.category_icon}
-								{prettyDate(a.date)}{a.location ? ` · ${a.location}` : ''}{a.notes ? ` · ${a.notes}` : ''}
+								{prettyDate(a.date)}{episodeLabel(a.ep)}{a.location ? ` · ${a.location}` : ''}{a.notes
+									? ` · ${a.notes}`
+									: ''}
 							</p>
 						</div>
 						<Rating value={a.log_rating} class="text-sm" />

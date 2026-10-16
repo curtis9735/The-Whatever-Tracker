@@ -2,6 +2,7 @@
 	import { enhance } from '$app/forms';
 	import { goto } from '$app/navigation';
 	import ItemForm from '$lib/components/ItemForm.svelte';
+	import { PROGRESS_KEYS } from '$lib/episodes';
 
 	let { data, form } = $props();
 	const cat = $derived(data.target.category);
@@ -47,7 +48,9 @@
 		{#key cat.id}
 			<ItemForm
 				category={cat}
-				itemFields={data.target.itemFields}
+				itemFields={data.tracked
+					? data.target.itemFields.filter((f) => !PROGRESS_KEYS.includes(f.key))
+					: data.target.itemFields}
 				allTags={data.allTags}
 				values={{ ...data.item, tags: data.tags }}
 			/>

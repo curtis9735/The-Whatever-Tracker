@@ -1,7 +1,8 @@
 import { error, fail, redirect } from '@sveltejs/kit';
 import { getCategoryById, getCategoryBySlug, listCategories } from '$lib/server/services/categories';
 import { addImage, createItem, imageSourcesFromForm, listUserTags } from '$lib/server/services/items';
-import { firstLogDate, parseItemForm, parseLogForm, todayIso } from '$lib/server/forms';
+import { firstLogDate, parseEpisodePick, parseItemForm, parseLogForm, todayIso } from '$lib/server/forms';
+import { applySavedProgressNow } from '$lib/server/services/episodes';
 import { addLogWithShow, afterAddPath, SHOW_LOOKUP_FAILED } from '$lib/server/services/concerts';
 import { ImageError } from '$lib/server/images/store';
 import { findExisting, linkToProvider, lookupFailure, parseMatch } from '$lib/server/services/provider-items';
@@ -55,12 +56,26 @@ export const actions: Actions = {
 			}
 		}
 
+		// A show from TMDB: the last episode watched marks it and every episode before it. Saved with
+		// the show first, so it isn't lost if TMDB doesn't answer now (the show's page tries again).
+		const progress =
+			match?.provider === 'tmdb' && match.kind === 'tv' ? parseEpisodePick(form, 'progress_') : null;
+		if (progress === 'invalid') return fail(400, { message: 'Pick the last episode you watched.' });
+		if (progress) {
+			parsed.data.custom = {
+				...parsed.data.custom,
+				current_season: progress.season,
+				current_episode: progress.episode
+			};
+		}
+
 		const item = createItem(userId, parsed.data, parsed.tags);
 		const warnings: string[] = [];
 		if (match) {
 			// Before the user's photos, so the poster becomes the cover
 			try {
 				await linkToProvider(userId, item.id, match);
+				if (progress) await applySavedProgressNow(userId, item.id, todayIso()).catch(() => null);
 			} catch (e) {
 				warnings.push(`Saved, but the details couldn't be loaded: ${lookupFailure(e)}`);
 			}

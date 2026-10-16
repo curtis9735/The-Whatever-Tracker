@@ -147,6 +147,22 @@ export async function linkToProvider(userId: number, itemId: number, ref: Provid
 	const item = getOwnedItem(userId, itemId);
 	const existing = findExisting(userId, ref.provider, ref.kind, ref.id);
 	if (existing && existing !== itemId) throw new MatchError('That one is already in your library.', existing);
+	// Episode check-ins belong to the show they were made against
+	const relink =
+		item.providerId &&
+		(item.provider !== ref.provider || item.providerKind !== ref.kind || item.providerId !== ref.id);
+	if (
+		relink &&
+		db()
+			.select({ id: schema.episodeWatches.id })
+			.from(schema.episodeWatches)
+			.where(eq(schema.episodeWatches.itemId, itemId))
+			.get()
+	) {
+		throw new MatchError(
+			'This show has episode check-ins, so it stays linked to the show they were made for.'
+		);
+	}
 	const d = await fetchDetails(ref.provider, ref.kind, ref.id);
 	updateItem(userId, itemId, {
 		provider: ref.provider,

@@ -31,6 +31,9 @@
 				<li><strong>{form.done.created}</strong> new items</li>
 				<li><strong>{form.done.updated}</strong> existing items updated</li>
 				<li><strong>{form.done.logsAdded}</strong> logs added</li>
+				{#if form.done.episodesAdded}
+					<li><strong>{form.done.episodesAdded}</strong> TV episodes marked watched</li>
+				{/if}
 				{#if form.done.createdCategories.length}
 					<li>New lists: {form.done.createdCategories.join(', ')}</li>
 				{/if}
@@ -72,7 +75,8 @@
 			</div>
 			<p class="text-xs text-muted">
 				Items already in your tracker are updated, not duplicated, so it's safe to import the same file again.
-				TV episodes become “current season / episode” progress, and seasons become logs.
+				Seasons become logs. Episodes of shows from TMDB are marked watched on the day you watched them; other
+				shows keep “current season / episode” progress.
 			</p>
 			<form method="POST" action="?/commit" use:enhance={submit} class="flex gap-2">
 				<input type="hidden" name="token" value={form.token} />

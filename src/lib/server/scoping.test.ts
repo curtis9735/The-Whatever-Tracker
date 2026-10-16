@@ -9,7 +9,7 @@ vi.mock('$env/dynamic/private', async () => {
 	return { env: { DATA_DIR: dir, MIGRATIONS_DIR: path.resolve('drizzle') } };
 });
 
-const { db, schema } = await import('./db');
+const { db, rawDb, schema } = await import('./db');
 const { createCategoryFromTemplate, getCategoryById, listCategories } = await import('./services/categories');
 const items = await import('./services/items');
 const { searchLocal } = await import('./search/local');
@@ -107,16 +107,28 @@ describe('Yamtrack import (database)', () => {
 		const user = makeUser('carol');
 		const plan = yam.planYamtrackImport(csv);
 		const first = yam.applyYamtrackImport(user.id, plan);
-		expect(first).toMatchObject({ created: 2, updated: 0, logsAdded: 2 });
+		expect(first).toMatchObject({ created: 2, updated: 0, logsAdded: 2, episodesAdded: 1 });
 		expect(first.createdCategories.sort()).toEqual(['Movies', 'TV Shows']);
 
 		const again = yam.applyYamtrackImport(user.id, yam.planYamtrackImport(csv));
-		expect(again).toMatchObject({ created: 0, updated: 2, logsAdded: 0, createdCategories: [] });
+		expect(again).toMatchObject({
+			created: 0,
+			updated: 2,
+			logsAdded: 0,
+			episodesAdded: 0,
+			createdCategories: []
+		});
 
 		const hits = searchLocal(user.id, 'thrones');
 		expect(hits).toHaveLength(1);
 		const got = items.getItemDetail(user.id, hits[0].id);
-		expect(got.item.custom).toMatchObject({ current_season: 1, current_episode: 10 });
+		// A show from TMDB gets the episode itself as watched, not typed-in progress
+		expect(got.item.custom).toEqual({});
+		expect(
+			rawDb()
+				.prepare('SELECT season, episode, watched_at FROM episode_watches WHERE item_id = ?')
+				.all(got.item.id)
+		).toEqual([{ season: 1, episode: 10, watched_at: '2019-01-20' }]);
 		expect(got.item.status).toBe('completed');
 	});
 });

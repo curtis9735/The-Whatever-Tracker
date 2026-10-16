@@ -6,6 +6,8 @@
 	import ImagePicker from '$lib/components/ImagePicker.svelte';
 	import LogFields from '$lib/components/LogFields.svelte';
 	import SetlistPicker from '$lib/components/SetlistPicker.svelte';
+	import EpisodeSelect from '$lib/components/EpisodeSelect.svelte';
+	import { logEpisodeLabel } from '$lib/episodes';
 
 	let { data, form } = $props();
 	const existing = $derived((data.log.external as { setlist?: SetlistEvent } | null)?.setlist ?? null);
@@ -18,6 +20,26 @@
 	let logLocation = $state<string>(data.log.location ?? '');
 	let keepSetlist = $state(true);
 	let busy = $state(false);
+
+	// Shows linked to TMDB: which episode this log is for
+	// svelte-ignore state_referenced_locally
+	let epSeason = $state<number | null>(data.plays.length === 1 ? data.plays[0].season : null);
+	// svelte-ignore state_referenced_locally
+	let epNumber = $state<number | null>(data.plays.length === 1 ? data.plays[0].episode : null);
+	let seasons = $state<{ number: number; aired: number; episodeCount: number }[]>([]);
+	$effect(() => {
+		data.seasons?.then((s) => (seasons = s));
+	});
+	const playsLabel = $derived(
+		data.plays.length > 1
+			? logEpisodeLabel({
+					count: data.plays.length,
+					first: data.plays[0],
+					last: data.plays[data.plays.length - 1],
+					title: null
+				})
+			: null
+	);
 
 	function onSetlist(e: SetlistEvent | null) {
 		if (e) {
@@ -85,6 +107,25 @@
 			</div>
 		{/if}
 
+		{#if data.tracked}
+			{#if playsLabel}
+				<p class="card p-4 text-sm">
+					<span class="font-medium">{playsLabel}</span>
+					<span class="text-muted">· marked together. Deleting this log un-watches them.</span>
+				</p>
+			{:else}
+				<input type="hidden" name="log_episode_set" value="1" />
+				<EpisodeSelect
+					{seasons}
+					episodesUrl={(s) => `/items/${data.item.id}/episodes?season=${s}`}
+					bind:season={epSeason}
+					bind:episode={epNumber}
+					noneLabel="No particular episode"
+					id="log-episode"
+				/>
+			{/if}
+		{/if}
+
 		<LogFields
 			logFields={data.logFields}
 			values={data.log}
@@ -130,7 +171,10 @@
 		action="?/delete"
 		class="mt-10 border-t border-border pt-6"
 		use:enhance={({ cancel }) => {
-			if (!confirm('Delete this log and its photos?')) cancel();
+			const unwatch = data.plays.length
+				? ` ${data.plays.length === 1 ? 'Its episode' : 'Its episodes'} will be marked unwatched.`
+				: '';
+			if (!confirm(`Delete this log and its photos?${unwatch}`)) cancel();
 		}}
 	>
 		<button class="btn btn-ghost btn-sm text-danger"><Icon name="trash" size={14} /> Delete log</button>

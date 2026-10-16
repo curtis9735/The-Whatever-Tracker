@@ -24,6 +24,21 @@ export const GET: RequestHandler = async ({ locals }) => {
 	const items = d.select().from(schema.items).where(eq(schema.items.userId, userId)).all();
 	const logs = d.select().from(schema.itemLogs).where(eq(schema.itemLogs.userId, userId)).all();
 	const images = d.select().from(schema.images).where(eq(schema.images.userId, userId)).all();
+	// TV episodes watched (a check-in's date is on its log)
+	const episodes = d
+		.select({
+			itemId: schema.episodeWatches.itemId,
+			season: schema.episodeWatches.season,
+			episode: schema.episodeWatches.episode,
+			title: schema.episodeWatches.title,
+			logId: schema.episodeWatches.logId,
+			watchedAt: schema.episodeWatches.watchedAt,
+			createdAt: schema.episodeWatches.createdAt
+		})
+		.from(schema.episodeWatches)
+		.where(eq(schema.episodeWatches.userId, userId))
+		.orderBy(asc(schema.episodeWatches.id))
+		.all();
 	const tags = d
 		.select({ itemId: schema.itemTags.itemId, name: schema.tags.name })
 		.from(schema.itemTags)
@@ -45,6 +60,7 @@ export const GET: RequestHandler = async ({ locals }) => {
 				...i,
 				tags: tags.filter((t) => t.itemId === i.id).map((t) => t.name),
 				logs: logs.filter((l) => l.itemId === i.id),
+				episodes: episodes.filter((e) => e.itemId === i.id).map((e) => ({ ...e, itemId: undefined })),
 				images: images.filter(
 					(im) => im.itemId === i.id || logs.some((l) => l.id === im.logId && l.itemId === i.id)
 				)

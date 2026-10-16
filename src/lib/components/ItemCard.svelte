@@ -1,4 +1,5 @@
 <script lang="ts">
+	import { progressLabel } from '$lib/episodes';
 	import { formatFieldValue } from '$lib/fields';
 	import { imageSrc, type ImageRef } from '$lib/images';
 	import type { FieldDef, StatusDef } from '$lib/types';
@@ -32,12 +33,18 @@
 
 	const src = $derived(imageSrc(item.image));
 	const statusLabel = $derived(statuses.find((s) => s.key === item.status)?.label ?? null);
-	const extras = $derived(
-		cardFields
-			.map((f) => formatFieldValue(f, item.custom[f.key]))
-			.filter(Boolean)
-			.join(' · ')
-	);
+	const extras = $derived.by(() => {
+		const parts: string[] = [];
+		const hasSeason = cardFields.some((f) => f.key === 'current_season');
+		for (const f of cardFields) {
+			// TV progress reads "S3 E5" rather than "3 · 5"
+			if (f.key === 'current_episode' && hasSeason) continue;
+			const v =
+				f.key === 'current_season' ? progressLabel(item.custom) : formatFieldValue(f, item.custom[f.key]);
+			if (v) parts.push(v);
+		}
+		return parts.join(' · ');
+	});
 	const lastLogged = $derived(
 		item.lastLoggedAt
 			? new Date(`${item.lastLoggedAt}T00:00:00`).toLocaleDateString(undefined, { dateStyle: 'medium' })

@@ -1,3 +1,4 @@
+import { validEpisode } from '$lib/episodes';
 import { parseCustomFields } from '$lib/fields';
 import { parseRatingInput } from '$lib/ratings';
 import { isFinished } from '$lib/status';
@@ -84,6 +85,22 @@ export function parseLogForm(
 			external
 		}
 	};
+}
+
+/**
+ * The episode picked on a log form (`log_season` + `log_episode`): null when none was picked,
+ * 'invalid' when the numbers make no sense.
+ */
+export function parseEpisodePick(
+	form: FormData,
+	prefix = 'log_'
+): { season: number; episode: number } | null | 'invalid' {
+	const s = str(form, `${prefix}season`, 6);
+	const e = str(form, `${prefix}episode`, 6);
+	if (s === null && e === null) return null;
+	const season = Number(s);
+	const episode = Number(e);
+	return validEpisode(season, episode) ? { season, episode } : 'invalid';
 }
 
 /**

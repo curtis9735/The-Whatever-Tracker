@@ -1,5 +1,7 @@
 <script lang="ts">
+	import { tick } from 'svelte';
 	import { enhance } from '$app/forms';
+	import { logEpisodeLabel, PROGRESS_KEYS, type TrackerView } from '$lib/episodes';
 	import { formatFieldValue } from '$lib/fields';
 	import { imageSrc } from '$lib/images';
 	import { categoryColor, PROVIDER_LABELS } from '$lib/kinds';
@@ -12,6 +14,8 @@
 	import RatingInput from '$lib/components/RatingInput.svelte';
 	import SetlistPicker from '$lib/components/SetlistPicker.svelte';
 	import MetadataMatch from '$lib/components/MetadataMatch.svelte';
+	import EpisodeSelect from '$lib/components/EpisodeSelect.svelte';
+	import EpisodeTracker from '$lib/components/EpisodeTracker.svelte';
 
 	let { data, form } = $props();
 
@@ -29,6 +33,8 @@
 	const statusLabel = $derived(cat.statuses.find((s) => s.key === item.status)?.label);
 	const filledFields = $derived(
 		data.itemFields.filter((f) => {
+			// Shows linked to TMDB: the episode tracker shows progress
+			if (data.tracked && PROGRESS_KEYS.includes(f.key)) return false;
 			const v = item.custom[f.key];
 			return v !== undefined && v !== null && v !== '' && !(Array.isArray(v) && !v.length);
 		})
@@ -40,6 +46,52 @@
 
 	let logOpen = $state(false);
 	let logFormKey = $state(0);
+
+	// Episodes (shows linked to TMDB) are streamed in, so the page never waits for TMDB
+	let tracker = $state<{ itemId: number; view: TrackerView } | null>(null);
+	$effect(() => {
+		const p = data.tracker;
+		const id = data.item.id;
+		if (!p) return;
+		let live = true;
+		p.then((view) => {
+			if (live) tracker = { itemId: id, view };
+		});
+		return () => {
+			live = false;
+		};
+	});
+	const trackerView = $derived(tracker?.itemId === item.id ? tracker.view : null);
+	const trackerSeasons = $derived(trackerView?.ok ? trackerView.seasons : []);
+	/** Bumped after every episode change, so open seasons fetch their episodes again */
+	let episodesVersion = $state(0);
+	const statusGroup = $derived(cat.statuses.find((s) => s.key === item.status)?.group);
+	let logSeason = $state<number | null>(null);
+	let logEpisode = $state<number | null>(null);
+
+	// Going straight to another item (e.g. from search) starts with its log form closed
+	// svelte-ignore state_referenced_locally
+	let shownItem = data.item.id;
+	$effect(() => {
+		if (data.item.id === shownItem) return;
+		shownItem = data.item.id;
+		logOpen = false;
+		logSeason = null;
+		logEpisode = null;
+	});
+
+	/** Opens "Add log", for an episode or (shows) the next one */
+	async function openLog(pick?: { season: number; episode: number }) {
+		const next = trackerView?.ok ? trackerView.next : null;
+		logSeason = pick?.season ?? next?.season ?? null;
+		logEpisode = pick?.episode ?? next?.episode ?? null;
+		if (logOpen && pick) logFormKey++;
+		logOpen = true;
+		if (pick) {
+			await tick();
+			document.getElementById('add-log')?.scrollIntoView({ behavior: 'smooth', block: 'start' });
+		}
+	}
 	let busy = $state(false);
 	let editingRating = $state(false);
 	let showGallery = $state(false);
@@ -175,6 +227,21 @@
 				<RatingInput value={item.rating} label="Your rating" />
 				<button class="btn btn-primary btn-sm">Save rating</button>
 			</form>
+		{/if}
+
+		{#if data.tracked}
+			<!-- Keyed: another show starts with its own open seasons and messages -->
+			{#key item.id}
+				<EpisodeTracker
+					itemId={item.id}
+					tracker={trackerView}
+					today={data.today}
+					{statusGroup}
+					version={episodesVersion}
+					onchanged={() => episodesVersion++}
+					onlog={(season, episode) => openLog({ season, episode })}
+				/>
+			{/key}
 		{/if}
 
 		{#if data.tags.length}
@@ -382,7 +449,11 @@
 		<section class="mt-8">
 			<div class="mb-3 flex items-center justify-between">
 				<h2 class="text-lg font-semibold">History</h2>
-				<button class="btn btn-primary btn-sm" onclick={() => (logOpen = !logOpen)} aria-expanded={logOpen}>
+				<button
+					class="btn btn-primary btn-sm"
+					onclick={() => (logOpen ? (logOpen = false) : openLog())}
+					aria-expanded={logOpen}
+				>
 					<Icon name="plus" size={16} /> Add log
 				</button>
 			</div>
@@ -406,11 +477,22 @@
 									logDate = undefined;
 									logLocation = undefined;
 									logFormKey++;
+									episodesVersion++;
 								}
 							};
 						}}
 					>
 						{#if form?.logError}<p class="error-box">{form.logError}</p>{/if}
+						{#if data.tracked}
+							<EpisodeSelect
+								seasons={trackerSeasons}
+								episodesUrl={(s) => `/items/${item.id}/episodes?season=${s}`}
+								bind:season={logSeason}
+								bind:episode={logEpisode}
+								noneLabel="No particular episode"
+								id="log-episode"
+							/>
+						{/if}
 						{#if data.canSetlist}
 							<SetlistPicker itemId={item.id} bind:selected={setlist} onpick={onSetlist} />
 							<input type="hidden" name="log_external" value={setlist ? JSON.stringify({ setlist }) : ''} />
@@ -445,6 +527,12 @@
 								<div class="flex items-start gap-3">
 									<div class="min-w-0 flex-1">
 										<p class="font-medium">{pretty(log.date)}</p>
+										{#if log.episodes}
+											<p class="flex items-center gap-1 text-sm">
+												<Icon name="check" size={14} class="shrink-0 text-accent" />
+												<span>{logEpisodeLabel(log.episodes)}</span>
+											</p>
+										{/if}
 										{#if log.location}
 											<p class="flex items-center gap-1 text-sm text-muted">
 												<Icon name="pin" size={14} />

@@ -1,4 +1,5 @@
 import { keys } from '../settings';
+import type { TmdbEpisode, TmdbSeason, TmdbShow, TmdbShowSeason } from '$lib/episodes';
 import type { NormalizedMetadata, SearchResult } from '$lib/types';
 import type { Provider, ReleaseInput } from './types';
 import { cached, fetchOk, joinNonEmpty, truncate, withTimeout, yearOf } from './util';
@@ -162,16 +163,83 @@ export function normalizeTmdbTv(t: {
 	};
 }
 
-// --- Release dates (Calendar) ------------------------------------------------------------
+// --- Seasons and episodes (Calendar, episode tracker) --------------------------------------
 
 const HOUR = 3_600_000;
 const isDate = (s: unknown): s is string => typeof s === 'string' && /^\d{4}-\d{2}-\d{2}$/.test(s);
 
-interface TmdbEpisode {
-	air_date?: string | null;
-	season_number?: number;
-	episode_number?: number;
-	name?: string;
+/** Episodes, slimmed down to what the app reads (a season's raw answer can run to megabytes) */
+const slimEpisode = (e: TmdbEpisode | null | undefined): TmdbEpisode | null =>
+	e
+		? {
+				id: e.id,
+				air_date: e.air_date ?? null,
+				season_number: e.season_number,
+				episode_number: e.episode_number,
+				name: e.name,
+				runtime: e.runtime ?? null
+			}
+		: null;
+
+const showEnded = (status: string | undefined) => /ended|canceled/i.test(status ?? '');
+
+/** A show's seasons and its latest and next episodes. Finished shows are re-checked monthly. */
+export async function tmdbTvShow(id: string, signal?: AbortSignal): Promise<TmdbShow> {
+	if (!/^\d+$/.test(id)) throw new Error('Bad TMDB id');
+	return cached<TmdbShow>(
+		`tmdb:tv-air:${id}`,
+		(v) => (showEnded(v.status) ? 30 * DAY : 12 * HOUR),
+		async () => {
+			const t = await tmdbGet(`/tv/${id}`, {}, signal);
+			return {
+				status: t.status,
+				first_air_date: t.first_air_date || null,
+				last_episode_to_air: slimEpisode(t.last_episode_to_air),
+				next_episode_to_air: slimEpisode(t.next_episode_to_air),
+				seasons: ((t.seasons ?? []) as TmdbShowSeason[]).map((s) => ({
+					season_number: s.season_number,
+					episode_count: s.episode_count ?? 0,
+					air_date: s.air_date || null,
+					name: s.name ?? ''
+				}))
+			};
+		},
+		{ staleIfError: true }
+	);
+}
+
+/**
+ * A season's episodes. Seasons of shows that have ended are re-checked monthly; a running show can
+ * add episodes to any season, so its seasons are re-checked twice a day. `fresh` asks TMDB right away.
+ */
+export async function tmdbSeason(
+	id: string,
+	n: number,
+	signal?: AbortSignal,
+	{ fresh = false }: { fresh?: boolean } = {}
+): Promise<TmdbSeason> {
+	if (!/^\d+$/.test(id) || !Number.isInteger(n) || n < 0 || n > 9999) throw new Error('Bad TMDB season');
+	let ended = false;
+	return cached<TmdbSeason>(
+		`tmdb:tv-season:${id}:${n}`,
+		() => (ended ? 30 * DAY : 12 * HOUR),
+		async () => {
+			// The show's status (usually saved already) is asked alongside, not before
+			const [s, done] = await Promise.all([
+				tmdbGet(`/tv/${id}/season/${n}`, {}, signal),
+				tmdbTvShow(id, signal)
+					.then((show) => showEnded(show.status))
+					.catch(() => false)
+			]);
+			ended = done;
+			return {
+				season_number: s.season_number,
+				name: s.name,
+				episodes: ((s.episodes ?? []) as TmdbEpisode[]).map((e) => slimEpisode(e)!)
+			};
+		},
+		{ staleIfError: true, force: fresh }
+	);
 }
 
 /** Every episode of a season that has an air date. */
@@ -192,28 +260,13 @@ export function normalizeTmdbSeason(s: { season_number?: number; episodes?: Tmdb
  * Finished shows are re-checked monthly, running ones twice a day.
  */
 export async function tmdbTvReleases(id: string, signal?: AbortSignal): Promise<ReleaseInput[]> {
-	if (!/^\d+$/.test(id)) throw new Error('Bad TMDB id');
-	const show = await cached<{
-		status?: string;
-		last_episode_to_air?: TmdbEpisode | null;
-		next_episode_to_air?: TmdbEpisode | null;
-	}>(
-		`tmdb:tv-air:${id}`,
-		(v) => (/ended|canceled/i.test(v.status ?? '') ? 30 * DAY : 12 * HOUR),
-		() => tmdbGet(`/tv/${id}`, {}, signal)
-	);
+	const show = await tmdbTvShow(id, signal);
 	const seasons = new Set<number>();
 	for (const ep of [show.last_episode_to_air, show.next_episode_to_air]) {
 		if (typeof ep?.season_number === 'number') seasons.add(ep.season_number);
 	}
-	const ended = /ended|canceled/i.test(show.status ?? '');
 	const out: ReleaseInput[] = [];
-	for (const n of seasons) {
-		const season = await cached(`tmdb:tv-season:${id}:${n}`, ended ? 30 * DAY : 12 * HOUR, () =>
-			tmdbGet(`/tv/${id}/season/${n}`, {}, signal)
-		);
-		out.push(...normalizeTmdbSeason(season));
-	}
+	for (const n of seasons) out.push(...normalizeTmdbSeason(await tmdbSeason(id, n, signal)));
 	return out;
 }
 
