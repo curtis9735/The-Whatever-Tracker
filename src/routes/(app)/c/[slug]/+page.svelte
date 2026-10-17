@@ -7,6 +7,15 @@
 	let { data } = $props();
 	const c = $derived(data.category);
 	const f = $derived(data.filters);
+	// On a list someone shared with the viewer: what they may do with it
+	const owner = $derived(c.access === 'owner');
+	const canAdd = $derived(c.access !== 'view');
+	// " · shared with 2 people" after the count, for the owner of a shared list
+	const sharedNote = $derived(
+		owner && c.sharedWith > 0
+			? ` · shared with ${c.sharedWith} ${c.sharedWith === 1 ? 'person' : 'people'}`
+			: ''
+	);
 	let showFilters = $state(false);
 
 	/** Builds a URL from the current params with some changed (null removes; page resets). */
@@ -35,27 +44,39 @@
 	>
 	<div class="min-w-0 flex-1">
 		<h1 class="truncate text-2xl font-semibold tracking-tight">{c.name}</h1>
-		<p class="text-sm text-muted">{data.total} {data.total === 1 ? 'item' : 'items'}</p>
+		<p class="text-sm text-muted">{data.total} {data.total === 1 ? 'item' : 'items'}{sharedNote}</p>
+		{#if !owner}
+			<p class="flex items-center gap-1 text-xs text-muted">
+				<Icon name="users" size={12} class="shrink-0" />
+				<span class="truncate"
+					>{c.ownerName}'s list{c.access === 'edit' ? ' · you can edit' : ' · view only'}</span
+				>
+			</p>
+		{/if}
 	</div>
-	<a
-		href="/c/{c.slug}/import"
-		class="btn btn-ghost btn-icon"
-		aria-label="Import a spreadsheet"
-		title="Import a spreadsheet"
-	>
-		<Icon name="upload" />
-	</a>
+	{#if owner}
+		<a
+			href="/c/{c.slug}/import"
+			class="btn btn-ghost btn-icon"
+			aria-label="Import a spreadsheet"
+			title="Import a spreadsheet"
+		>
+			<Icon name="upload" />
+		</a>
+	{/if}
 	<a
 		href="/categories/{c.slug}/edit"
 		class="btn btn-ghost btn-icon"
-		aria-label="Edit list settings"
-		title="Edit list"
+		aria-label={owner ? 'Edit list settings' : 'Your settings for this list'}
+		title={owner ? 'Edit list' : 'Your settings'}
 	>
 		<Icon name="settings" />
 	</a>
-	<a href="/items/new?category={c.slug}" class="btn btn-primary"
-		><Icon name="plus" size={18} /><span class="hidden sm:inline">Add</span></a
-	>
+	{#if canAdd}
+		<a href="/items/new?category={c.slug}" class="btn btn-primary"
+			><Icon name="plus" size={18} /><span class="hidden sm:inline">Add</span></a
+		>
+	{/if}
 </div>
 
 <!-- Status chips -->
@@ -171,9 +192,12 @@
 				: 'Nothing matches these filters.'}
 		</p>
 		<div class="flex flex-wrap justify-center gap-2">
-			<a class="btn btn-primary" href="/items/new?category={c.slug}"><Icon name="plus" size={18} /> Add one</a
-			>
-			{#if data.total === 0 && !activeFilters && !f.status}
+			{#if canAdd}
+				<a class="btn btn-primary" href="/items/new?category={c.slug}"
+					><Icon name="plus" size={18} /> Add one</a
+				>
+			{/if}
+			{#if owner && data.total === 0 && !activeFilters && !f.status}
 				<a class="btn" href="/c/{c.slug}/import"
 					><Icon name="upload" size={16} /> Have a spreadsheet? Import it</a
 				>

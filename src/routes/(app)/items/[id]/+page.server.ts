@@ -5,8 +5,9 @@ import {
 	deleteImage,
 	deleteItem,
 	deleteLog,
+	canDeleteItem,
+	getItem,
 	getItemDetail,
-	getOwnedItem,
 	getOwnedLog,
 	imageSourcesFromForm,
 	setCover,
@@ -86,7 +87,7 @@ function whenLog(form: FormData, today: string): { date: string } | null | 'inva
  */
 function revertStatus(userId: number, id: number, form: FormData) {
 	if (!form.has('status_set')) return;
-	const item = getOwnedItem(userId, id);
+	const item = getItem(userId, id);
 	if (item.status !== String(form.get('status_set'))) return;
 	const was = String(form.get('status_was') ?? '');
 	const { category } = getCategoryById(userId, item.categoryId);
@@ -121,10 +122,12 @@ async function saveImages(
 	return warnings;
 }
 
+// Status, favorite, rating, logs and episodes are each person's own: anyone the list is shared with,
+// even to view, keeps theirs. Photos, details, links and deleting change the item for everyone.
 export const actions: Actions = {
 	status: async ({ request, locals, params }) => {
 		const userId = locals.user!.id;
-		const item = getOwnedItem(userId, itemId(params));
+		const item = getItem(userId, itemId(params));
 		const { category } = getCategoryById(userId, item.categoryId);
 		const status = String((await request.formData()).get('status') ?? '');
 		if (!category.statuses.some((s) => s.key === status)) return fail(400, { message: 'Unknown status' });
@@ -133,20 +136,20 @@ export const actions: Actions = {
 
 	favorite: async ({ locals, params }) => {
 		const userId = locals.user!.id;
-		const item = getOwnedItem(userId, itemId(params));
+		const item = getItem(userId, itemId(params));
 		updateItem(userId, item.id, { favorite: !item.favorite });
 	},
 
 	rate: async ({ request, locals, params }) => {
 		const userId = locals.user!.id;
-		const item = getOwnedItem(userId, itemId(params));
+		const item = getItem(userId, itemId(params));
 		const rating = parseRatingInput((await request.formData()).get('rating'));
 		updateItem(userId, item.id, { rating });
 	},
 
 	addLog: async ({ request, locals, params }) => {
 		const userId = locals.user!.id;
-		const item = getOwnedItem(userId, itemId(params));
+		const item = getItem(userId, itemId(params));
 		const { category, logFields } = getCategoryById(userId, item.categoryId);
 		const form = await request.formData();
 		const parsed = parseLogForm(form, category, logFields);
@@ -267,7 +270,7 @@ export const actions: Actions = {
 	/** Re-fetches a log's setlist from setlist.fm (songs are often added in the days after a show). */
 	refreshSetlist: async ({ request, locals, params }) => {
 		const userId = locals.user!.id;
-		const item = getOwnedItem(userId, itemId(params));
+		const item = getItem(userId, itemId(params));
 		const log = getOwnedLog(userId, Number((await request.formData()).get('logId')));
 		const current = (log.external as { setlist?: SetlistEvent } | null)?.setlist;
 		if (log.itemId !== item.id || !current) return fail(400, { warning: 'This log has no setlist.' });
@@ -295,26 +298,31 @@ export const actions: Actions = {
 
 	addImages: async ({ request, locals, params }) => {
 		const userId = locals.user!.id;
-		const item = getOwnedItem(userId, itemId(params));
+		const item = getItem(userId, itemId(params), 'edit');
 		const form = await request.formData();
 		const warnings = await saveImages(userId, { itemId: item.id }, form, 'img_');
 		if (warnings.length) return fail(400, { imageError: warnings[0] });
 		return { imagesAdded: true };
 	},
 
-	deleteImage: async ({ request, locals }) => {
+	deleteImage: async ({ request, locals, params }) => {
+		const userId = locals.user!.id;
+		getItem(userId, itemId(params), 'edit');
 		const imageId = Number((await request.formData()).get('imageId'));
-		await deleteImage(locals.user!.id, imageId);
+		await deleteImage(userId, imageId);
 	},
 
 	cover: async ({ request, locals, params }) => {
+		const userId = locals.user!.id;
+		const item = getItem(userId, itemId(params), 'edit');
 		const imageId = Number((await request.formData()).get('imageId'));
-		setCover(locals.user!.id, itemId(params), imageId);
+		setCover(userId, item.id, imageId);
 	},
 
 	refresh: async ({ locals, params }) => {
+		const item = getItem(locals.user!.id, itemId(params), 'edit');
 		try {
-			await refreshMetadata(locals.user!.id, itemId(params));
+			await refreshMetadata(locals.user!.id, item.id);
 			return { refreshed: true };
 		} catch (e) {
 			const message = (e as { body?: { message?: string } }).body?.message ?? 'Could not refresh metadata';
@@ -324,10 +332,11 @@ export const actions: Actions = {
 
 	/** Links an item added by hand to a TMDB/IGDB/… entry, pulling the poster and details. */
 	link: async ({ request, locals, params }) => {
+		const item = getItem(locals.user!.id, itemId(params), 'edit');
 		const match = parseMatch(await request.formData());
 		if (!match) return fail(400, { linkError: 'Pick one of the matches first.' });
 		try {
-			await linkToProvider(locals.user!.id, itemId(params), match);
+			await linkToProvider(locals.user!.id, item.id, match);
 			return { linked: true };
 		} catch (e) {
 			if (e instanceof MatchError) return fail(400, { linkError: e.message, existingId: e.existingId });
@@ -337,8 +346,14 @@ export const actions: Actions = {
 
 	delete: async ({ locals, params }) => {
 		const userId = locals.user!.id;
-		const item = getOwnedItem(userId, itemId(params));
+		const item = getItem(userId, itemId(params), 'edit');
 		const { category } = getCategoryById(userId, item.categoryId);
+		if (!canDeleteItem(userId, item)) {
+			error(
+				403,
+				`Others have tracked this, so only ${category.ownerName ?? 'the list’s owner'} can delete it.`
+			);
+		}
 		await deleteItem(userId, item.id);
 		redirect(303, `/c/${category.slug}`);
 	}

@@ -1,9 +1,79 @@
 import { asc, eq, inArray } from 'drizzle-orm';
-import { db, schema } from '$lib/server/db';
+import { db, rawDb, schema } from '$lib/server/db';
 import { APP_VERSION } from '$lib/server/config';
+import type { Image, ItemLog } from '$lib/server/db/schema';
+import type { ShareRole } from '$lib/types';
 import type { RequestHandler } from './$types';
 
-/** Everything this user has tracked, as one JSON file (photos are referenced by path). */
+interface SharedItemRow {
+	id: number;
+	title: string;
+	subtitle: string | null;
+	provider: string | null;
+	providerKind: string | null;
+	providerId: string | null;
+	status: string | null;
+	rating: number | null;
+	favorite: number;
+	notes: string | null;
+	lastLoggedAt: string | null;
+}
+
+/**
+ * The user's own progress on lists others share with them: for each list, the items they've tracked,
+ * with their status, rating, favorite, notes, logs (and log photos) and TV episodes. The lists and
+ * items themselves are in their owners' exports.
+ */
+function sharedProgress<E extends { itemId: number }>(
+	userId: number,
+	logs: ItemLog[],
+	episodes: E[],
+	images: Image[]
+) {
+	const sqlite = rawDb();
+	const lists = sqlite
+		.prepare(
+			`SELECT c.id, c.name, u.username AS owner, s.role AS access FROM list_shares s
+			 JOIN categories c ON c.id = s.category_id
+			 JOIN users u ON u.id = c.user_id
+			 WHERE s.user_id = ? ORDER BY c.name COLLATE NOCASE`
+		)
+		.all(userId) as { id: number; name: string; owner: string; access: ShareRole }[];
+	const itemsOf = sqlite.prepare(
+		`SELECT i.id, i.title, i.subtitle, i.provider, i.provider_kind AS providerKind,
+			i.provider_id AS providerId, p.status, p.rating, COALESCE(p.favorite, 0) AS favorite, p.notes,
+			p.last_logged_at AS lastLoggedAt
+		 FROM items i LEFT JOIN item_progress p ON p.item_id = i.id AND p.user_id = ?
+		 WHERE i.category_id = ? ORDER BY i.title COLLATE NOCASE`
+	);
+	return lists.map(({ id, ...list }) => ({
+		...list,
+		items: (itemsOf.all(userId, id) as SharedItemRow[])
+			.map(({ id: itemId, favorite, ...i }) => ({
+				...i,
+				favorite: !!favorite,
+				logs: logs
+					.filter((l) => l.itemId === itemId)
+					.map((l) => ({ ...l, images: images.filter((im) => im.logId === l.id) })),
+				episodes: episodes.filter((e) => e.itemId === itemId).map((e) => ({ ...e, itemId: undefined }))
+			}))
+			// Only what they've tracked
+			.filter(
+				(i) =>
+					i.status !== null ||
+					i.rating !== null ||
+					i.favorite ||
+					i.notes !== null ||
+					i.logs.length > 0 ||
+					i.episodes.length > 0
+			)
+	}));
+}
+
+/**
+ * Everything this user has tracked, as one JSON file (photos are referenced by path): their own lists,
+ * and in `sharedWithMe` their own progress on lists others share with them.
+ */
 export const GET: RequestHandler = async ({ locals }) => {
 	const userId = locals.user!.id;
 	const d = db();
@@ -45,6 +115,7 @@ export const GET: RequestHandler = async ({ locals }) => {
 		.innerJoin(schema.tags, eq(schema.tags.id, schema.itemTags.tagId))
 		.where(eq(schema.tags.userId, userId))
 		.all();
+	const sharedWithMe = sharedProgress(userId, logs, episodes, images);
 
 	const body = JSON.stringify(
 		{
@@ -64,7 +135,8 @@ export const GET: RequestHandler = async ({ locals }) => {
 				images: images.filter(
 					(im) => im.itemId === i.id || logs.some((l) => l.id === im.logId && l.itemId === i.id)
 				)
-			}))
+			})),
+			sharedWithMe
 		},
 		null,
 		2

@@ -168,7 +168,11 @@
 										>
 											{#if l.shown}<Icon name="check" size={12} stroke={3} />{/if}
 										</span>
-										<span class="min-w-0 flex-1 truncate">{l.icon} {l.name}</span>
+										<span class="min-w-0 flex-1 truncate"
+											>{l.icon}
+											{l.name}{#if l.ownerName}<span class="text-muted">{` · ${l.ownerName}'s`}</span
+												>{/if}</span
+										>
 										<span class="text-xs text-muted">{l.linked}</span>
 									</button>
 								</form>

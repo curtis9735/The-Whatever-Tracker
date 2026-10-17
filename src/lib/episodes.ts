@@ -59,6 +59,17 @@ export function isTrackedShow(item: {
 	return item.provider === 'tmdb' && item.providerKind === 'tv' && /^\d+$/.test(item.providerId ?? '');
 }
 
+/**
+ * Whether an item's "Current season / episode" fields are its owner's own progress: on a show, or on a
+ * list of shows. Only the owner sets them, and people the list is shared with don't see them.
+ */
+export function ownersProgressFields(
+	item: { provider?: string | null; providerKind?: string | null } | null,
+	listKinds: string[]
+) {
+	return (item?.provider === 'tmdb' && item.providerKind === 'tv') || listKinds.includes('tmdb:tv');
+}
+
 export const isDate = (s: unknown): s is string => typeof s === 'string' && /^\d{4}-\d{2}-\d{2}$/.test(s);
 
 export const isEnded = (status: string | null | undefined) => /ended|canceled/i.test(status ?? '');

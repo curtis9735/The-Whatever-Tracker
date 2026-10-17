@@ -72,7 +72,7 @@
 		>
 			<option value="">All lists</option>
 			{#each page.data.categories as c (c.id)}
-				<option value={c.slug}>{c.icon} {c.name}</option>
+				<option value={c.slug}>{c.icon} {c.name}{c.ownerName ? ` (${c.ownerName}'s)` : ''}</option>
 			{/each}
 		</select>
 	</div>

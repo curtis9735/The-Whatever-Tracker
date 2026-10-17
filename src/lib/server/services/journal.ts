@@ -1,4 +1,5 @@
 import { rawDb } from '../db';
+import { ME, seesList } from './access';
 import { logEpisodesSql } from './items';
 import { logEpisodeLabel, parseLogEpisodes } from '$lib/episodes';
 import { imageSrc, type ImageRef } from '$lib/images';
@@ -23,12 +24,21 @@ export interface JournalEntry {
 	imageUrl: string | null;
 }
 
+/**
+ * The viewer's own logs, on their lists and ones still shared with them (a log on a list they left
+ * stays, but out of sight). Starts a query: bind the viewer's id first.
+ */
+const MY_LOGS = `FROM ${ME} CROSS JOIN item_logs l
+	JOIN items i ON i.id = l.item_id
+	JOIN categories c ON c.id = i.category_id`;
+const IS_MY_LOG = `l.user_id = me.id AND ${seesList()}`;
+
 /** First and last day anything was logged (for "All Time"). */
 export function logBounds(userId: number, categoryId: number | null) {
 	const row = rawDb()
 		.prepare(
-			`SELECT MIN(l.date) AS first, MAX(l.date) AS last FROM item_logs l JOIN items i ON i.id = l.item_id
-			 WHERE l.user_id = ? AND (? IS NULL OR i.category_id = ?)`
+			`SELECT MIN(l.date) AS first, MAX(l.date) AS last ${MY_LOGS}
+			 WHERE ${IS_MY_LOG} AND (? IS NULL OR i.category_id = ?)`
 		)
 		.get(userId, categoryId, categoryId) as { first: string | null; last: string | null };
 	return row;
@@ -48,8 +58,8 @@ export function journal(
 	const counts: Record<string, number> = {};
 	for (const r of sqlite
 		.prepare(
-			`SELECT l.date, COUNT(*) AS n FROM item_logs l JOIN items i ON i.id = l.item_id
-			 WHERE l.user_id = ? AND l.date BETWEEN ? AND ? AND ${scope} GROUP BY l.date`
+			`SELECT l.date, COUNT(*) AS n ${MY_LOGS}
+			 WHERE ${IS_MY_LOG} AND l.date BETWEEN ? AND ? AND ${scope} GROUP BY l.date`
 		)
 		.all(userId, range.from, range.to, categoryId, categoryId) as { date: string; n: number }[]) {
 		counts[r.date] = r.n;
@@ -59,8 +69,8 @@ export function journal(
 	const activeDays = (
 		sqlite
 			.prepare(
-				`SELECT DISTINCT l.date FROM item_logs l JOIN items i ON i.id = l.item_id
-				 WHERE l.user_id = ? AND l.date <= ? AND ${scope} ORDER BY l.date DESC LIMIT 4000`
+				`SELECT DISTINCT l.date ${MY_LOGS}
+				 WHERE ${IS_MY_LOG} AND l.date <= ? AND ${scope} ORDER BY l.date DESC LIMIT 4000`
 			)
 			.all(userId, today, categoryId, categoryId) as { date: string }[]
 	).map((r) => r.date);
@@ -71,11 +81,9 @@ export function journal(
 				i.id AS item_id, i.title, i.subtitle,
 				c.name AS category_name, c.icon AS category_icon, c.color AS category_color,
 				im.kind AS img_kind, im.path AS img_path, im.thumb_path AS img_thumb, im.source_url AS img_source
-			 FROM item_logs l
-			 JOIN items i ON i.id = l.item_id
-			 JOIN categories c ON c.id = i.category_id
+			 ${MY_LOGS}
 			 LEFT JOIN images im ON im.id = i.cover_image_id
-			 WHERE l.user_id = ? AND l.date BETWEEN ? AND ? AND ${scope}
+			 WHERE ${IS_MY_LOG} AND l.date BETWEEN ? AND ? AND ${scope}
 			 ORDER BY l.date DESC, l.id DESC
 			 LIMIT ?`
 		)

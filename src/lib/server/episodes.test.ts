@@ -10,7 +10,7 @@ vi.mock('$env/dynamic/private', async () => {
 
 const { db, rawDb, schema } = await import('./db');
 const { createCategoryFromTemplate } = await import('./services/categories');
-const { addLog, createItem, deleteLog, getItemDetail, getOwnedItem, listItems, recentActivity, updateItem } =
+const { addLog, createItem, deleteLog, getItemDetail, getItem, listItems, recentActivity, updateItem } =
 	await import('./services/items');
 const episodes = await import('./services/episodes');
 const { journal } = await import('./services/journal');
@@ -133,7 +133,7 @@ function account(status = 'planning') {
 	return { user, tv, running: show(id), ended: show(id + 1, 'Old Show'), id, show };
 }
 
-const statusOf = (userId: number, itemId: number) => getOwnedItem(userId, itemId).status;
+const statusOf = (userId: number, itemId: number) => getItem(userId, itemId).status;
 const plays = (itemId: number) =>
 	rawDb()
 		.prepare('SELECT season, episode, log_id AS logId FROM episode_watches WHERE item_id = ? ORDER BY id')
@@ -370,12 +370,12 @@ describe('taking plays back', () => {
 		);
 		const r = episodes.unwatchEpisode(a.user.id, a.running.id, 1, 1);
 		expect(r).toMatchObject({ removed: [{ title: 'Pilot 1', watchedAt: null }], kept: 1 });
-		const before = episodes.watchedEpisodes(a.running.id);
+		const before = episodes.watchedEpisodes(a.running.id, a.user.id);
 		expect(plays(a.running.id)).toEqual([{ season: 1, episode: 1, logId: logged.logId }]);
 		episodes.restorePlays(a.user.id, a.running.id, 1, 1, r.removed);
 		expect(plays(a.running.id)).toHaveLength(2);
 		// Back in its old place, so "next episode" is where it was
-		expect(episodes.watchedEpisodes(a.running.id)[0].lastId).toBe(before[0].lastId);
+		expect(episodes.watchedEpisodes(a.running.id, a.user.id)[0].lastId).toBe(before[0].lastId);
 		const ids = rawDb()
 			.prepare('SELECT id FROM episode_watches WHERE item_id = ? ORDER BY id')
 			.all(a.running.id);
@@ -409,7 +409,7 @@ describe('taking plays back', () => {
 		);
 		await episodes.removePlay(a.user.id, c.watchId, a.running.id);
 		expect(getItemDetail(a.user.id, a.running.id).logs).toEqual([]);
-		expect(getOwnedItem(a.user.id, a.running.id).lastLoggedAt).toBeNull();
+		expect(getItem(a.user.id, a.running.id).lastLoggedAt).toBeNull();
 
 		const d = await episodes.watchEpisode(
 			a.user.id,
@@ -458,10 +458,10 @@ describe('progress typed in before check-ins', () => {
 	it('marks every aired episode up to it once, and then forgets it', async () => {
 		const a = account('watching');
 		const legacy = a.show(a.id + 2, 'Legacy', { current_season: 2, current_episode: 1 });
-		const before = getOwnedItem(a.user.id, legacy.id).updatedAt;
+		const before = getItem(a.user.id, legacy.id).updatedAt;
 		expect(await episodes.applySavedProgressNow(a.user.id, legacy.id, today)).toBe('applied');
 		expect(plays(legacy.id).map((p) => `${p.season}:${p.episode}`)).toEqual(['1:1', '1:2', '1:3', '2:1']);
-		const after = getOwnedItem(a.user.id, legacy.id);
+		const after = getItem(a.user.id, legacy.id);
 		expect(after.custom).toEqual({});
 		expect(after.updatedAt).toEqual(before);
 		// Un-watching everything doesn't bring it back

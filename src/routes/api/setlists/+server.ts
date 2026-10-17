@@ -1,7 +1,7 @@
 import { error, json } from '@sveltejs/kit';
 import { searchSetlists, setlistfmEnabled } from '$lib/server/providers/setlistfm';
 import { ProviderError } from '$lib/server/providers/util';
-import { getOwnedItem } from '$lib/server/services/items';
+import { getItem } from '$lib/server/services/items';
 import { getCategoryById } from '$lib/server/services/categories';
 import { listUsesSetlists, setlistArtist } from '$lib/server/services/concerts';
 import type { RequestHandler } from './$types';
@@ -10,7 +10,8 @@ import type { RequestHandler } from './$types';
 export const GET: RequestHandler = async ({ locals, url, request }) => {
 	if (!setlistfmEnabled()) error(503, 'setlist.fm is not connected (Me → Integrations)');
 	const userId = locals.user!.id;
-	const item = getOwnedItem(userId, Number(url.searchParams.get('item')));
+	// Shows are picked for the viewer's own logs, so seeing the list is enough
+	const item = getItem(userId, Number(url.searchParams.get('item')));
 	const { category } = getCategoryById(userId, item.categoryId);
 	if (!listUsesSetlists(category)) {
 		error(400, `Turn on “Concert setlists” in the ${category.name} list settings first`);

@@ -4,10 +4,11 @@ import { db, schema } from '../db';
 import { getProvider } from '../providers/registry';
 import { ProviderError } from '../providers/util';
 import { getCategoryById } from './categories';
-import { addImage, createItem, getOwnedItem, updateItem } from './items';
+import { addImage, createItem, getItem, updateItem } from './items';
+import { listAccess } from './access';
 import { addLogWithShow, afterAddPath } from './concerts';
 import { refreshItemReleases } from './releases';
-import { reindexItem } from '../search/local';
+import { libraryMatches, reindexItem } from '../search/local';
 import type { NormalizedMetadata } from '$lib/types';
 
 export function metadataToStore(d: NormalizedMetadata) {
@@ -33,14 +34,15 @@ export async function fetchDetails(providerId: string, kind: string, id: string,
 	}
 }
 
-export function findExisting(userId: number, provider: string, kind: string, id: string) {
+/** `ownerId`'s item for a source entry, on any of their lists (one at most: it's unique per owner) */
+function ownersItem(ownerId: number, provider: string, kind: string, id: string) {
 	return (
 		db()
 			.select({ id: schema.items.id })
 			.from(schema.items)
 			.where(
 				and(
-					eq(schema.items.userId, userId),
+					eq(schema.items.userId, ownerId),
 					eq(schema.items.provider, provider),
 					eq(schema.items.providerKind, kind),
 					eq(schema.items.providerId, id)
@@ -48,6 +50,29 @@ export function findExisting(userId: number, provider: string, kind: string, id:
 			)
 			.get()?.id ?? null
 	);
+}
+
+/**
+ * The item for a source entry that the viewer already has: on their own lists first, then on lists
+ * shared with them. `ownOnly` looks at their own lists only.
+ */
+export function findExisting(
+	userId: number,
+	provider: string,
+	kind: string,
+	id: string,
+	{ ownOnly = false }: { ownOnly?: boolean } = {}
+) {
+	if (ownOnly) return ownersItem(userId, provider, kind, id);
+	return libraryMatches(userId, [{ provider, kind, id }])[`${provider}:${kind}:${id}`] ?? null;
+}
+
+/**
+ * Someone else's list can only have one item per source entry across all of its owner's lists. When
+ * the owner already has it on a list the viewer can't see, adding or linking it there is refused.
+ */
+function hiddenClash(ownerName: string | null) {
+	return `${ownerName ?? "The list's owner"} already has this in a list that isn't shared with you.`;
 }
 
 export interface AddFromProviderInput {
@@ -66,7 +91,11 @@ export async function addFromProvider(userId: number, input: AddFromProviderInpu
 	const existing = findExisting(userId, input.provider, input.kind, input.id);
 	if (existing) return { id: existing, created: false };
 
-	const { category } = getCategoryById(userId, input.categoryId);
+	// 404 if the list isn't the viewer's, 403 if it's shared with them only to view
+	const { category } = getCategoryById(userId, input.categoryId, 'edit');
+	if (category.userId !== userId && ownersItem(category.userId, input.provider, input.kind, input.id)) {
+		error(409, hiddenClash(category.ownerName));
+	}
 	const d = await fetchDetails(input.provider, input.kind, input.id);
 	const status =
 		input.status && category.statuses.some((s) => s.key === input.status)
@@ -144,9 +173,18 @@ export function lookupFailure(e: unknown) {
  * fills an empty subtitle/description, and adds the poster (cover if the item has none yet).
  */
 export async function linkToProvider(userId: number, itemId: number, ref: ProviderRef) {
-	const item = getOwnedItem(userId, itemId);
-	const existing = findExisting(userId, ref.provider, ref.kind, ref.id);
-	if (existing && existing !== itemId) throw new MatchError('That one is already in your library.', existing);
+	const item = getItem(userId, itemId, 'edit');
+	// Each owner has a source entry once, so the match is checked against the item owner's lists
+	const existing = ownersItem(item.userId, ref.provider, ref.kind, ref.id);
+	if (existing && existing !== itemId) {
+		if (item.userId === userId) throw new MatchError('That one is already in your library.', existing);
+		const { category } = getCategoryById(userId, item.categoryId);
+		const other = db().select().from(schema.items).where(eq(schema.items.id, existing)).get();
+		const visible = !!other && listAccess(userId, other.categoryId) !== null;
+		throw visible
+			? new MatchError(`That one is already in ${category.ownerName}'s library.`, existing)
+			: new MatchError(hiddenClash(category.ownerName));
+	}
 	// Episode check-ins belong to the show they were made against
 	const relink =
 		item.providerId &&
@@ -188,7 +226,7 @@ function lookUpReleases(userId: number, itemId: number) {
 
 /** Re-pulls provider data. Keeps the user's own title; refreshes description, subtitle and facts. */
 export async function refreshMetadata(userId: number, itemId: number) {
-	const item = getOwnedItem(userId, itemId);
+	const item = getItem(userId, itemId, 'edit');
 	if (!item.provider || !item.providerKind || !item.providerId)
 		error(400, 'This item has no metadata source');
 	const d = await fetchDetails(item.provider, item.providerKind, item.providerId);

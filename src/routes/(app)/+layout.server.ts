@@ -9,11 +9,13 @@ export const load: LayoutServerLoad = async ({ locals, url }) => {
 	const user = locals.user!;
 	if (!user.onboarded && url.pathname !== '/onboarding') redirect(303, '/onboarding');
 
+	// Their own lists, then the ones others share with them
 	const categories = listCategories(user.id);
 	const enabled = enabledKinds();
-	// Search only the sources the user actually has a list for
+	// Search only the sources the user has a list to add to (their own, or one shared with them to edit)
+	const addable = categories.filter((c) => c.access !== 'view');
 	const searchKinds = KINDS.filter(
-		(k) => enabled.has(k.key) && categories.some((c) => c.providerKinds.includes(k.key))
+		(k) => enabled.has(k.key) && addable.some((c) => c.providerKinds.includes(k.key))
 	).map((k) => k.key);
 
 	return { user, categories, searchKinds, setlistReady: setlistfmEnabled() };

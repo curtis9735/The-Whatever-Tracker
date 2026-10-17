@@ -12,7 +12,7 @@ vi.mock('$env/dynamic/private', async () => {
 
 const { searchSetlists, setlistSearchUrl } = await import('./providers/setlistfm');
 const { addLogWithShow, afterAddPath, listUsesSetlists, setlistArtist } = await import('./services/concerts');
-const { createItem, getOwnedItem } = await import('./services/items');
+const { createItem, getItem } = await import('./services/items');
 const { getCategoryById } = await import('./services/categories');
 const { setlistSections } = await import('$lib/setlists');
 const { rawDb } = await import('./db');
@@ -181,7 +181,7 @@ describe('adding a concert saves the show with it', () => {
 		expect(setlist.songs).toHaveLength(2);
 		expect(setlist.tour).toBe('Loop Tour');
 		// Logging a "Want to see" artist marks them Seen
-		expect(getOwnedItem(user, item.id).status).toBe('seen');
+		expect(getItem(user, item.id).status).toBe('seen');
 		expect(afterAddPath(item.id, log.id, show)).toBe(`/items/${item.id}`);
 	}, 15_000);
 

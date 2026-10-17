@@ -1,6 +1,6 @@
 import type { Category, Item } from '../db/schema';
 import { searchSetlists, setlistfmEnabled, type SetlistQuery } from '../providers/setlistfm';
-import { addLog, getOwnedItem, type LogInput } from './items';
+import { addLog, getItem, type LogInput } from './items';
 import { SETLIST_SOURCE } from '$lib/kinds';
 import type { SetlistEvent } from '$lib/types';
 
@@ -42,7 +42,8 @@ export async function addLogWithShow(
 	category: Category,
 	input: LogInput
 ): Promise<{ log: ReturnType<typeof addLog>; show: ShowLookup }> {
-	const item = getOwnedItem(userId, itemId);
+	// Logs are each person's own, so seeing the list is enough
+	const item = getItem(userId, itemId);
 	let show: ShowLookup = 'off';
 	let entry = input;
 	if (canFindSetlists(item, category) && !input.external) {

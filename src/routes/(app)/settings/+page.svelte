@@ -4,6 +4,8 @@
 	import IntegrationRow from '$lib/components/IntegrationRow.svelte';
 
 	let { data, form } = $props();
+	// Spreadsheets only go into the user's own lists (not ones shared with them)
+	const ownLists = $derived(data.categories.filter((c) => c.access === 'owner'));
 
 	function size(n: number) {
 		return n > 1e6 ? `${(n / 1e6).toFixed(1)} MB` : `${Math.round(n / 1e3)} KB`;
@@ -120,13 +122,13 @@
 				><Icon name="download" size={16} /> Export as JSON</a
 			>
 		</div>
-		{#if data.categories.length}
+		{#if ownLists.length}
 			<div class="mt-4">
 				<p class="mb-2 text-sm text-muted">
 					Or paste or upload a spreadsheet (like a table of whiskeys or movies) into a list:
 				</p>
 				<div class="flex flex-wrap gap-2">
-					{#each data.categories as c (c.id)}
+					{#each ownLists as c (c.id)}
 						<a class="chip" href="/c/{c.slug}/import"><span>{c.icon}</span>{c.name}</a>
 					{/each}
 				</div>

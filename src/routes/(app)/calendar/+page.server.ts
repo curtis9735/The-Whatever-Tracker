@@ -39,7 +39,7 @@ export const actions: Actions = {
 		return { refreshed: result };
 	},
 
-	/** Shows or hides one list's releases */
+	/** Shows or hides one list's releases (just for this person, on a list shared with them) */
 	toggleList: async ({ locals, request }) => {
 		const form = await request.formData();
 		const id = Number(form.get('categoryId'));

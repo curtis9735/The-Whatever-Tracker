@@ -9,7 +9,13 @@ import type { Actions, PageServerLoad } from './$types';
 
 export const load: PageServerLoad = async ({ locals }) => {
 	const enabled = enabledKinds();
-	const existing = new Set(listCategories(locals.user!.id).map((c) => c.name.toLowerCase()));
+	const lists = listCategories(locals.user!.id);
+	// Only the user's own lists count (a list someone shares with them doesn't stop them making their own)
+	const existing = new Set(lists.filter((c) => c.access === 'owner').map((c) => c.name.toLowerCase()));
+	// …but one shared with them by that name isn't offered by default
+	const shared = new Map(
+		lists.filter((c) => c.access !== 'owner').map((c) => [c.name.toLowerCase(), c.ownerName])
+	);
 	return {
 		templates: TEMPLATES.map((t) => ({
 			key: t.key,
@@ -19,7 +25,8 @@ export const load: PageServerLoad = async ({ locals }) => {
 			// Only search sources matter here; setlist.fm is optional extra detail when logging
 			needsSource: t.providerKinds.some((k) => KIND_BY_KEY.has(k)),
 			sourceReady: t.providerKinds.filter((k) => KIND_BY_KEY.has(k)).every((k) => enabled.has(k)),
-			exists: existing.has(t.name.toLowerCase())
+			exists: existing.has(t.name.toLowerCase()),
+			sharedBy: shared.get(t.name.toLowerCase()) ?? null
 		}))
 	};
 };

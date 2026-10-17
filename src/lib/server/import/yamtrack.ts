@@ -259,9 +259,17 @@ export const MEDIA_TYPE_LABELS: Record<string, string> = {
 	comic: 'Comics'
 };
 
+/**
+ * The importer's own lists. An import only ever uses and changes the importer's own lists and items,
+ * never a list someone shares with them.
+ */
+function ownLists(userId: number) {
+	return listCategories(userId).filter((c) => c.access === 'owner');
+}
+
 /** Finds (without creating) the category each media type would go into. */
 export function resolveTargets(userId: number, types: string[]) {
-	const cats = listCategories(userId);
+	const cats = ownLists(userId);
 	const out: Record<string, { categoryId: number | null; name: string }> = {};
 	for (const t of types) {
 		const template = TEMPLATE_FOR[t as MainType];
@@ -293,7 +301,9 @@ export function previewYamtrackImport(userId: number, plan: ImportPlan) {
 	const targets = resolveTargets(userId, Object.keys(plan.counts));
 	return Object.entries(plan.counts).map(([type, c]) => {
 		const existing = plan.items.filter(
-			(i) => i.mediaType === type && findExisting(userId, i.provider, i.providerKind, i.providerId)
+			(i) =>
+				i.mediaType === type &&
+				findExisting(userId, i.provider, i.providerKind, i.providerId, { ownOnly: true })
 		).length;
 		return {
 			type,
@@ -328,7 +338,7 @@ export function applyYamtrackImport(userId: number, plan: ImportPlan) {
 		categoryIds[type] = cat.id;
 		createdCategories.push(cat.name);
 	}
-	const statusesFor = new Map(listCategories(userId).map((c) => [c.id, c.statuses]));
+	const statusesFor = new Map(ownLists(userId).map((c) => [c.id, c.statuses]));
 
 	let created = 0;
 	let updated = 0;
@@ -341,7 +351,7 @@ export function applyYamtrackImport(userId: number, plan: ImportPlan) {
 			const categoryId = categoryIds[p.mediaType];
 			const statuses = statusesFor.get(categoryId) ?? [];
 			const status = mapStatus(statuses, p.status);
-			const existingId = findExisting(userId, p.provider, p.providerKind, p.providerId);
+			const existingId = findExisting(userId, p.provider, p.providerKind, p.providerId, { ownOnly: true });
 			const tracked = isTrackedShow(p);
 			let itemId: number;
 
@@ -403,11 +413,18 @@ export function applyYamtrackImport(userId: number, plan: ImportPlan) {
 				}
 			}
 
+			// The importer's own logs (on a list they share, others have theirs on the same items)
 			for (const l of p.logs) {
 				const dup = db()
 					.select({ id: schema.itemLogs.id, notes: schema.itemLogs.notes })
 					.from(schema.itemLogs)
-					.where(and(eq(schema.itemLogs.itemId, itemId), eq(schema.itemLogs.date, l.date)))
+					.where(
+						and(
+							eq(schema.itemLogs.itemId, itemId),
+							eq(schema.itemLogs.userId, userId),
+							eq(schema.itemLogs.date, l.date)
+						)
+					)
 					.all()
 					.some((x) => (x.notes ?? null) === (l.notes ?? null));
 				if (dup) continue;
@@ -420,9 +437,9 @@ export function applyYamtrackImport(userId: number, plan: ImportPlan) {
 			if (tracked) episodesAdded += importEpisodes(userId, itemId, p.episodes);
 			rawDb()
 				.prepare(
-					'UPDATE items SET last_logged_at = (SELECT MAX(date) FROM item_logs WHERE item_id = ?) WHERE id = ?'
+					'UPDATE items SET last_logged_at = (SELECT MAX(date) FROM item_logs WHERE item_id = ? AND user_id = ?) WHERE id = ?'
 				)
-				.run(itemId, itemId);
+				.run(itemId, userId, itemId);
 			touched.push(itemId);
 		}
 	});
@@ -436,7 +453,7 @@ export function applyYamtrackImport(userId: number, plan: ImportPlan) {
  * already has plays for are skipped, so importing the same file again adds nothing.
  */
 function importEpisodes(userId: number, itemId: number, episodes: PlannedItem['episodes']) {
-	const have = new Set(watchedEpisodes(itemId).map((w) => `${w.season}:${w.episode}`));
+	const have = new Set(watchedEpisodes(itemId, userId).map((w) => `${w.season}:${w.episode}`));
 	const plays = new Map<string, { season: number; episode: number; watchedAt: string | null }>();
 	for (const e of episodes) {
 		const key = `${e.season}:${e.episode}`;

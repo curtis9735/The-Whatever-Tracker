@@ -3,7 +3,7 @@
 	import { tick } from 'svelte';
 	import { KINDS, PROVIDER_LABELS, SETLIST_SOURCE } from '$lib/kinds';
 	import { isFinished } from '$lib/status';
-	import type { LocalSearchHit, NormalizedMetadata, SearchResult, StatusDef } from '$lib/types';
+	import type { ListAccess, LocalSearchHit, NormalizedMetadata, SearchResult, StatusDef } from '$lib/types';
 	import BarcodeScanner from './BarcodeScanner.svelte';
 	import Icon from './Icon.svelte';
 	import Rating from './Rating.svelte';
@@ -16,6 +16,10 @@
 		icon: string;
 		statuses: StatusDef[];
 		providerKinds: string[];
+		/** The viewer's: owner, edit or view (lists shared to view can't be added to) */
+		access?: ListAccess;
+		/** Whose list it is, when someone else shared it */
+		ownerName?: string | null;
 	}
 
 	let {
@@ -49,6 +53,10 @@
 		}))
 	);
 	const term = $derived(q.trim());
+	// Lists new things can go into: the viewer's own, and shared lists they can edit
+	const addable = $derived(categories.filter((c) => c.access !== 'view'));
+	/** "Whiskey", or "Whiskey (Daniel's)" for someone else's list */
+	const listName = (c: Cat) => (c.ownerName ? `${c.name} (${c.ownerName}'s)` : c.name);
 
 	$effect(() => {
 		if (open && !dialog.open) {
@@ -140,15 +148,15 @@
 	let addError = $state('');
 	let ratingForm: HTMLFormElement | undefined = $state();
 
-	const addCategory = $derived(categories.find((c) => c.id === addCategoryId) ?? null);
+	const addCategory = $derived(addable.find((c) => c.id === addCategoryId) ?? null);
 	const sortedCats = $derived(
 		preview
-			? [...categories].sort(
+			? [...addable].sort(
 					(a, b) =>
 						Number(b.providerKinds.includes(preview!.kindKey)) -
 						Number(a.providerKinds.includes(preview!.kindKey))
 				)
-			: categories
+			: addable
 	);
 
 	function today() {
@@ -167,7 +175,7 @@
 		addError = '';
 		logDate = today();
 		mode = 'preview';
-		const cat = categories.find((c) => c.providerKinds.includes(r.kindKey)) ?? categories[0];
+		const cat = addable.find((c) => c.providerKinds.includes(r.kindKey)) ?? addable[0];
 		addCategoryId = cat?.id ?? null;
 		addStatus = cat?.statuses[0]?.key ?? '';
 		try {
@@ -334,12 +342,12 @@
 						<p class="mb-4">
 							Type to search your library{searchKinds.length ? ' and every connected source at once' : ''}.
 						</p>
-						{#if categories.length}
+						{#if addable.length}
 							<p class="section-title mb-2">Add something new</p>
 							<div class="flex flex-wrap gap-2">
-								{#each categories as c (c.id)}
+								{#each addable as c (c.id)}
 									<button class="chip" onclick={() => go(`/items/new?category=${c.slug}`)}>
-										<span>{c.icon}</span>{c.name}
+										<span>{c.icon}</span>{listName(c)}
 									</button>
 								{/each}
 							</div>
@@ -429,19 +437,19 @@
 					{/each}
 
 					<!-- Manual create -->
-					{#if categories.length}
+					{#if addable.length}
 						<section class="mb-2 rounded-2xl border border-dashed border-border p-3">
 							<p class="mb-2 text-sm">
 								Create <strong>“{term}”</strong> in…
 							</p>
 							<div class="flex flex-wrap gap-2">
-								{#each categories as c (c.id)}
+								{#each addable as c (c.id)}
 									<button
 										class="chip"
 										data-result
 										onclick={() => go(`/items/new?category=${c.slug}&title=${encodeURIComponent(term)}`)}
 									>
-										<span>{c.icon}</span>{c.name}
+										<span>{c.icon}</span>{listName(c)}
 									</button>
 								{/each}
 							</div>
@@ -522,14 +530,14 @@
 		{/if}
 
 		<div class="card space-y-3 p-4">
-			{#if !categories.length}
+			{#if !addable.length}
 				<p class="text-sm">Create a category first, then you can add this.</p>
 			{:else}
 				<div>
 					<label class="label" for="add-cat">Add to</label>
 					<select class="input" id="add-cat" bind:value={addCategoryId} onchange={onCategoryChange}>
 						{#each sortedCats as c (c.id)}
-							<option value={c.id}>{c.icon} {c.name}</option>
+							<option value={c.id}>{c.icon} {listName(c)}</option>
 						{/each}
 					</select>
 				</div>

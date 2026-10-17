@@ -23,13 +23,18 @@
 						name="templates"
 						value={t.key}
 						class="mt-1 h-5 w-5 shrink-0 accent-[var(--accent)]"
-						checked={!t.exists && defaults.has(t.key)}
+						checked={!t.exists && !t.sharedBy && defaults.has(t.key)}
 						disabled={t.exists}
 					/>
 					<span class="text-2xl" aria-hidden="true">{t.icon}</span>
 					<span class="min-w-0">
 						<span class="block font-medium">{t.name}{t.exists ? ' (already added)' : ''}</span>
 						<span class="block text-sm text-muted">{t.description}</span>
+						{#if t.sharedBy && !t.exists}
+							<span class="mt-1 block text-xs text-muted">
+								{t.sharedBy} already shares a {t.name} list with you. Tick it to keep one of your own too.
+							</span>
+						{/if}
 						{#if t.needsSource && !t.sourceReady}
 							<span class="mt-1 block text-xs text-amber-600 dark:text-amber-400">
 								Metadata search needs an API key (see Settings → Integrations). You can still add items by

@@ -13,6 +13,7 @@
 		extra,
 		afterTitle,
 		afterStatus,
+		allowNoStatus = false,
 		title = $bindable(),
 		status = $bindable()
 	}: {
@@ -40,12 +41,15 @@
 		afterStatus?: Snippet;
 		/** The chosen status key, for parents that react to it */
 		status?: string;
+		/** Offer "No status" (and start on it when there is none), e.g. for an item the viewer hasn't tracked yet */
+		allowNoStatus?: boolean;
 	} = $props();
 
 	// svelte-ignore state_referenced_locally
 	if (title === undefined) title = values.title ?? '';
 	// svelte-ignore state_referenced_locally
-	if (status === undefined) status = values.status ?? category.statuses[0]?.key ?? '';
+	if (status === undefined)
+		status = values.status ?? (allowNoStatus ? '' : (category.statuses[0]?.key ?? ''));
 
 	// svelte-ignore state_referenced_locally
 	let showMore = $state(!!(values.description || values.barcode));
@@ -84,6 +88,7 @@
 		<div>
 			<label class="label" for="status">Status</label>
 			<select class="input" id="status" name="status" bind:value={status}>
+				{#if allowNoStatus}<option value="">No status</option>{/if}
 				{#each category.statuses as s (s.key)}
 					<option value={s.key}>{s.label}</option>
 				{/each}

@@ -1,5 +1,5 @@
 import { getCategoryBySlug } from '$lib/server/services/categories';
-import { listItems, type ListFilters } from '$lib/server/services/items';
+import { listItems, statusCounts, type ListFilters } from '$lib/server/services/items';
 import { rawDb } from '$lib/server/db';
 import { parseRatingInput } from '$lib/ratings';
 import type { PageServerLoad } from './$types';
@@ -36,18 +36,14 @@ export const load: PageServerLoad = async ({ locals, params, url }) => {
 	};
 	const { rows, total } = listItems(userId, category.id, category.statuses, filters);
 
-	// Status counts for the chips
-	const counts = rawDb()
-		.prepare('SELECT status, COUNT(*) AS n FROM items WHERE category_id = ? AND user_id = ? GROUP BY status')
-		.all(category.id, userId) as { status: string | null; n: number }[];
-
+	// Tags on the list's items (for a shared list, the ones its owner and editors gave them)
 	const categoryTags = (
 		rawDb()
 			.prepare(
 				`SELECT DISTINCT t.name FROM tags t JOIN item_tags it ON it.tag_id = t.id JOIN items i ON i.id = it.item_id
-				 WHERE i.category_id = ? AND i.user_id = ? ORDER BY t.name`
+				 WHERE i.category_id = ? ORDER BY t.name`
 			)
-			.all(category.id, userId) as { name: string }[]
+			.all(category.id) as { name: string }[]
 	).map((t) => t.name);
 
 	return {
@@ -58,7 +54,8 @@ export const load: PageServerLoad = async ({ locals, params, url }) => {
 		total,
 		page: filters.page!,
 		pageSize: filters.pageSize!,
-		statusCounts: Object.fromEntries(counts.map((c) => [c.status ?? '', c.n])),
+		// For the chips: how many items the viewer has in each of their own statuses
+		statusCounts: statusCounts(userId, category.id),
 		tags: categoryTags,
 		filters: {
 			status: filters.status,

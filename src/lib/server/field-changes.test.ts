@@ -11,7 +11,7 @@ vi.mock('$env/dynamic/private', async () => {
 const { db, schema } = await import('./db');
 const { createCategoryFromTemplate, getCategoryById, getFields, saveFieldChanges } =
 	await import('./services/categories');
-const { createItem, getOwnedItem } = await import('./services/items');
+const { createItem, getItem } = await import('./services/items');
 
 function setup() {
 	const user = db()
@@ -87,7 +87,7 @@ describe('saving the fields from list settings', () => {
 		const sent = asSent(catId);
 		sent.find((f) => f.label === 'Price')!.removed = true;
 		saveFieldChanges(catId, sent);
-		expect(getOwnedItem(userId, item.id).custom).toEqual({ distillery: 'Lagavulin', price: 90 });
+		expect(getItem(userId, item.id).custom).toEqual({ distillery: 'Lagavulin', price: 90 });
 	});
 
 	it("can't change an existing field's type, and only pick-one fields keep choices", () => {

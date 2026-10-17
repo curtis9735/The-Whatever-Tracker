@@ -10,7 +10,8 @@
 	<div>
 		<h1 class="text-2xl font-semibold tracking-tight">Household accounts</h1>
 		<p class="mt-1 text-sm text-muted">
-			Everyone gets their own lists, ratings and photos. Nobody can see anyone else's.
+			Everyone gets their own lists, ratings and photos. Nobody sees anyone else's lists unless they're shared
+			with them.
 		</p>
 	</div>
 
@@ -27,7 +28,7 @@
 					<span class="text-sm text-muted">@{u.username}</span>
 					{#if u.isAdmin}<span class="badge">admin</span>{/if}
 					{#if u.id === data.user.id}<span class="badge">you</span>{/if}
-					<span class="ml-auto text-xs text-muted">{u.items} items</span>
+					<span class="ml-auto text-xs text-muted">{`${u.items} ${u.items === 1 ? 'item' : 'items'}`}</span>
 				</div>
 				<details class="mt-2">
 					<summary class="cursor-pointer text-sm text-accent">Manage</summary>
@@ -61,6 +62,11 @@
 								/>
 								<button class="btn btn-danger">Delete account</button>
 							</form>
+							{#if u.sharedLists}
+								<p class="hint">
+									Their lists go with it, including {u.sharedLists === 1 ? 'one' : u.sharedLists} shared with others.
+								</p>
+							{/if}
 						{/if}
 					</div>
 				</details>

@@ -62,7 +62,10 @@
 					>
 					<span class="min-w-0">
 						<span class="block truncate font-medium">{c.name}</span>
-						<span class="text-xs text-muted">{c.itemCount} {c.itemCount === 1 ? 'item' : 'items'}</span>
+						<span class="block truncate text-xs text-muted"
+							>{c.ownerName ? `${c.ownerName}'s · ` : ''}{c.itemCount}
+							{c.itemCount === 1 ? 'item' : 'items'}</span
+						>
 					</span>
 				</a>
 			{/each}

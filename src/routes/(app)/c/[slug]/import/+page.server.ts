@@ -14,7 +14,8 @@ const Mapping = z.object({
 const Skipped = z.array(z.number().int().min(0)).max(10_000);
 
 export const load: PageServerLoad = async ({ locals, params }) => {
-	const { category } = getCategoryBySlug(locals.user!.id, params.slug);
+	// Importing is for the list's owner: it adds fields and choices to the list
+	const { category } = getCategoryBySlug(locals.user!.id, params.slug, 'owner');
 	return {
 		category: { id: category.id, name: category.name, slug: category.slug, icon: category.icon },
 		ctx: listContext(locals.user!.id, category.id)
@@ -24,7 +25,7 @@ export const load: PageServerLoad = async ({ locals, params }) => {
 export const actions: Actions = {
 	import: async ({ request, locals, params }) => {
 		const userId = locals.user!.id;
-		const { category } = getCategoryBySlug(userId, params.slug);
+		const { category } = getCategoryBySlug(userId, params.slug, 'owner');
 		const form = await request.formData();
 		const text = String(form.get('text') ?? '');
 		if (!text.trim()) return fail(400, { message: 'There is nothing to import. Paste your table first.' });

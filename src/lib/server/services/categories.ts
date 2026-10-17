@@ -1,32 +1,75 @@
-import { and, asc, count, eq, max, sql } from 'drizzle-orm';
+import { and, asc, count, eq, max } from 'drizzle-orm';
 import { error } from '@sveltejs/kit';
-import { db, schema } from '../db';
+import { db, rawDb, schema } from '../db';
 import { TEMPLATE_BY_KEY, DEFAULT_STATUSES, type CategoryTemplate } from '../templates';
 import { fieldKey, slugify } from '$lib/fields';
-import type { FieldDef, FieldScope, FieldType, StatusDef } from '$lib/types';
+import type { FieldDef, FieldScope, FieldType, ListAccess, StatusDef } from '$lib/types';
 import type { Category, FieldDefinition } from '../db/schema';
+import { requireAccess } from './access';
 
+interface CategoryRow {
+	id: number;
+	name: string;
+	slug: string;
+	icon: string;
+	color: string;
+	statuses: string;
+	providerKinds: string;
+	sortOrder: number;
+	itemCount: number;
+	access: ListAccess;
+	ownerName: string | null;
+	ownerUsername: string;
+	sharedWith: number;
+}
+
+/**
+ * The viewer's lists, then the lists others share with them. `slug` is how the viewer reaches a list:
+ * a shared list's is `slug@owner` (/c/whiskey@daniel), as two people can each have a "whiskey" list.
+ */
 export function listCategories(userId: number) {
-	return db()
-		.select({
-			id: schema.categories.id,
-			name: schema.categories.name,
-			slug: schema.categories.slug,
-			icon: schema.categories.icon,
-			color: schema.categories.color,
-			statuses: schema.categories.statuses,
-			providerKinds: schema.categories.providerKinds,
-			sortOrder: schema.categories.sortOrder,
-			// Written out in full: an interpolated column renders unqualified and would bind to items.id
-			itemCount: sql<number>`(SELECT COUNT(*) FROM items WHERE items.category_id = categories.id)`
-		})
-		.from(schema.categories)
-		.where(eq(schema.categories.userId, userId))
-		.orderBy(asc(schema.categories.sortOrder), asc(schema.categories.name))
-		.all();
+	const rows = rawDb()
+		.prepare(
+			`SELECT c.id, c.name, c.slug, c.icon, c.color, c.statuses, c.provider_kinds AS providerKinds,
+				c.sort_order AS sortOrder,
+				(SELECT COUNT(*) FROM items WHERE items.category_id = c.id) AS itemCount,
+				IIF(c.user_id = me.id, 'owner', sh.role) AS access,
+				IIF(c.user_id = me.id, NULL, u.display_name) AS ownerName, u.username AS ownerUsername,
+				(SELECT COUNT(*) FROM list_shares x WHERE x.category_id = c.id) AS sharedWith
+			 FROM (SELECT ? AS id) me CROSS JOIN categories c
+			 JOIN users u ON u.id = c.user_id
+			 LEFT JOIN list_shares sh ON sh.category_id = c.id AND sh.user_id = me.id
+			 WHERE c.user_id = me.id OR sh.user_id IS NOT NULL
+			 ORDER BY c.user_id != me.id, IIF(c.user_id = me.id, c.sort_order, 0), c.name COLLATE NOCASE`
+		)
+		.all(userId) as CategoryRow[];
+	return rows.map((r) => ({
+		id: r.id,
+		name: r.name,
+		slug: r.access === 'owner' ? r.slug : sharedSlug(r.slug, r.ownerUsername),
+		icon: r.icon,
+		color: r.color,
+		statuses: JSON.parse(r.statuses) as StatusDef[],
+		providerKinds: JSON.parse(r.providerKinds) as string[],
+		sortOrder: r.sortOrder,
+		itemCount: r.itemCount,
+		/** The viewer's: owner, edit or view */
+		access: r.access,
+		/** Whose list it is, when it isn't the viewer's */
+		ownerName: r.ownerName,
+		/** How many people it's shared with */
+		sharedWith: r.sharedWith
+	}));
 }
 
 export type CategorySummary = ReturnType<typeof listCategories>[number];
+
+/** Lists new items can go into: the viewer's own, and shared lists they can edit */
+export function editableCategories(userId: number) {
+	return listCategories(userId).filter((c) => c.access !== 'view');
+}
+
+const sharedSlug = (slug: string, owner: string) => `${slug}@${owner}`;
 
 export function toFieldDef(f: FieldDefinition): FieldDef {
 	return {
@@ -49,27 +92,78 @@ export function getFields(categoryId: number) {
 		.all();
 }
 
-export function getCategoryBySlug(userId: number, slug: string) {
-	const category = db()
-		.select()
-		.from(schema.categories)
-		.where(and(eq(schema.categories.userId, userId), eq(schema.categories.slug, slug)))
-		.get();
+/**
+ * A list as the viewer sees it. For a list shared with them, `slug` is `slug@owner` (the path to it),
+ * `showUpNext`/`showInCalendar` are their own choices, and `userId` is still the owner's.
+ */
+export type ViewCategory = Category & {
+	access: ListAccess;
+	/** Whose list it is, when it isn't the viewer's */
+	ownerName: string | null;
+	/** How many people it's shared with */
+	sharedWith: number;
+};
+
+/**
+ * `need`: 'view' to see it (anyone it's shared with), 'edit' to add or change its items, 'owner' for
+ * its settings. A list the viewer can't see is a 404; one they can see but not change this way, a 403.
+ */
+export function getCategoryBySlug(userId: number, slug: string, need: ListAccess = 'view') {
+	const at = slug.lastIndexOf('@');
+	const category =
+		at === -1
+			? db()
+					.select()
+					.from(schema.categories)
+					.where(and(eq(schema.categories.userId, userId), eq(schema.categories.slug, slug)))
+					.get()
+			: db()
+					.select({ c: schema.categories })
+					.from(schema.categories)
+					.innerJoin(schema.users, eq(schema.users.id, schema.categories.userId))
+					.where(
+						and(eq(schema.categories.slug, slug.slice(0, at)), eq(schema.users.username, slug.slice(at + 1)))
+					)
+					.get()?.c;
 	if (!category) error(404, 'Category not found');
-	return withFields(category);
+	return withFields(viewCategory(userId, category, need));
 }
 
-export function getCategoryById(userId: number, id: number) {
-	const category = db()
-		.select()
-		.from(schema.categories)
-		.where(and(eq(schema.categories.userId, userId), eq(schema.categories.id, id)))
-		.get();
+export function getCategoryById(userId: number, id: number, need: ListAccess = 'view') {
+	const category = db().select().from(schema.categories).where(eq(schema.categories.id, id)).get();
 	if (!category) error(404, 'Category not found');
-	return withFields(category);
+	return withFields(viewCategory(userId, category, need));
 }
 
-function withFields(category: Category) {
+function viewCategory(userId: number, category: Category, need: ListAccess): ViewCategory {
+	const sqlite = rawDb();
+	const sharedWith = (
+		sqlite.prepare('SELECT COUNT(*) AS n FROM list_shares WHERE category_id = ?').get(category.id) as {
+			n: number;
+		}
+	).n;
+	if (category.userId === userId) return { ...category, access: 'owner', ownerName: null, sharedWith };
+	const share = sqlite
+		.prepare(
+			`SELECT s.role, s.show_up_next AS upNext, s.show_in_calendar AS inCalendar,
+				u.username, u.display_name AS ownerName
+			 FROM list_shares s JOIN users u ON u.id = ? WHERE s.category_id = ? AND s.user_id = ?`
+		)
+		.get(category.userId, category.id, userId) as
+		{ role: ListAccess; upNext: number; inCalendar: number; username: string; ownerName: string } | undefined;
+	requireAccess(share?.role, need, 'Category not found');
+	return {
+		...category,
+		slug: sharedSlug(category.slug, share!.username),
+		showUpNext: !!share!.upNext,
+		showInCalendar: !!share!.inCalendar,
+		access: share!.role,
+		ownerName: share!.ownerName,
+		sharedWith
+	};
+}
+
+function withFields(category: ViewCategory) {
 	const rows = getFields(category.id);
 	const defs = rows.map(toFieldDef);
 	return {
@@ -300,7 +394,7 @@ function createFromTemplate(userId: number, t: CategoryTemplate) {
 }
 
 export function updateCategory(userId: number, id: number, input: CategoryInput) {
-	const existing = getCategoryById(userId, id).category;
+	const existing = getCategoryById(userId, id, 'owner').category;
 	const slug = existing.name === input.name ? existing.slug : uniqueSlug(userId, input.name, id);
 	db()
 		.update(schema.categories)
@@ -330,6 +424,15 @@ export function updateCategory(userId: number, id: number, input: CategoryInput)
 			db().update(schema.items).set({ status: first }).where(eq(schema.items.id, r.id)).run();
 		}
 	}
+	// …and so do the statuses of the people it's shared with
+	const progress = rawDb()
+		.prepare(
+			`SELECT p.item_id AS itemId, p.user_id AS userId, p.status FROM item_progress p
+			 JOIN items i ON i.id = p.item_id WHERE i.category_id = ? AND p.status IS NOT NULL`
+		)
+		.all(id) as { itemId: number; userId: number; status: string }[];
+	const fallBack = rawDb().prepare('UPDATE item_progress SET status = ? WHERE item_id = ? AND user_id = ?');
+	for (const r of progress) if (!keys.has(r.status)) fallBack.run(first, r.itemId, r.userId);
 	return slug;
 }
 
@@ -341,7 +444,7 @@ export function deleteCategory(userId: number, id: number) {
 }
 
 export function moveCategory(userId: number, id: number, direction: -1 | 1) {
-	const cats = listCategories(userId);
+	const cats = listCategories(userId).filter((c) => c.access === 'owner');
 	const idx = cats.findIndex((c) => c.id === id);
 	const swap = idx + direction;
 	if (idx < 0 || swap < 0 || swap >= cats.length) return;
@@ -353,9 +456,9 @@ export function moveCategory(userId: number, id: number, direction: -1 | 1) {
 	});
 }
 
-/** The category a provider result goes into by default. */
+/** The category a provider result goes into by default: the viewer's own lists first, then ones shared with them to edit. */
 export function findCategoryForKind(userId: number, kindKey: string) {
-	return listCategories(userId).find((c) => c.providerKinds.includes(kindKey)) ?? null;
+	return editableCategories(userId).find((c) => c.providerKinds.includes(kindKey)) ?? null;
 }
 
 export function categoryItemCount(categoryId: number) {

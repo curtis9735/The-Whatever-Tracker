@@ -22,6 +22,8 @@
 	let { data, form } = $props();
 	const ctx = $derived(data.ctx);
 	const cat = $derived(data.category);
+	// Only the user's own lists take a spreadsheet, not ones shared with them
+	const ownLists = $derived(data.categories.filter((c) => c.access === 'owner'));
 
 	let text = $state('');
 	let mapping = $state<ImportMapping | null>(null);
@@ -164,7 +166,7 @@
 					{/if}
 				</div>
 				{#if fileError}<p class="error-box">{fileError}</p>{/if}
-				{#if data.categories.length > 1}
+				{#if ownLists.length > 1}
 					<div class="flex items-center gap-2 text-sm">
 						<label for="into" class="text-muted">Import into</label>
 						<select
@@ -173,7 +175,7 @@
 							value={cat.slug}
 							onchange={(e) => goto(`/c/${(e.currentTarget as HTMLSelectElement).value}/import`)}
 						>
-							{#each data.categories as c (c.id)}<option value={c.slug}>{c.icon} {c.name}</option>{/each}
+							{#each ownLists as c (c.id)}<option value={c.slug}>{c.icon} {c.name}</option>{/each}
 						</select>
 					</div>
 				{/if}

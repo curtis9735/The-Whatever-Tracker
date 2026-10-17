@@ -36,8 +36,12 @@ export function existingTitles(categoryId: number) {
 	return out;
 }
 
+/**
+ * Importing a spreadsheet is for the list's owner only (it adds fields and choices to the list), so
+ * everything it writes is the owner's: items, tags, photos, and their own status, rating and logs.
+ */
 export function listContext(userId: number, categoryId: number): ListContext {
-	const { category, itemFields, logFields } = getCategoryById(userId, categoryId);
+	const { category, itemFields, logFields } = getCategoryById(userId, categoryId, 'owner');
 	return {
 		name: category.name,
 		statuses: category.statuses,
@@ -142,6 +146,7 @@ export function applySheetImport(
 			.where(eq(schema.itemTags.itemId, itemId))
 			.all()
 			.map((t) => t.name);
+		// The importer owns the list, so the tags are theirs
 		setTags(userId, itemId, [...new Set([...current, ...names])]);
 	}
 	for (const id of touched) reindexItem(id);
@@ -209,12 +214,13 @@ export function applySheetImport(
 			db().update(schema.items).set({ coverImageId: img.id }).where(eq(schema.items.id, itemId)).run();
 	}
 
-	/** One log per date; importing the same sheet again adds nothing. */
+	/** One log per date; importing the same sheet again adds nothing. Only the owner's own logs count. */
 	function addLog(itemId: number, l: NonNullable<BuiltRow['log']>) {
+		const theirs = and(eq(schema.itemLogs.itemId, itemId), eq(schema.itemLogs.userId, userId));
 		const dup = db()
 			.select({ id: schema.itemLogs.id })
 			.from(schema.itemLogs)
-			.where(and(eq(schema.itemLogs.itemId, itemId), eq(schema.itemLogs.date, l.date)))
+			.where(and(theirs, eq(schema.itemLogs.date, l.date)))
 			.get();
 		if (dup) return false;
 		const item = db()
@@ -240,7 +246,7 @@ export function applySheetImport(
 				lastLoggedAt: db()
 					.select({ d: schema.itemLogs.date })
 					.from(schema.itemLogs)
-					.where(eq(schema.itemLogs.itemId, itemId))
+					.where(theirs)
 					.orderBy(schema.itemLogs.date)
 					.all()
 					.at(-1)!.d

@@ -15,7 +15,8 @@ reverse proxy, and to work well on a phone.
   stripped of location data on the server. Links are copied to the NAS by default so they never break.
 - **Barcode scanning.** Scan a bottle or a sauce. If you already have it, you jump straight to it. Otherwise
   Open Food Facts fills in the name and photo.
-- **Household accounts.** Everyone gets private lists, ratings and photos.
+- **Household accounts.** Everyone gets private lists, ratings and photos, and can share a list with others in
+  the household. Each person keeps their own status, rating, notes and history on a shared list.
 - **Spreadsheet import.** Paste a table from Excel, Google Sheets or Numbers (or upload a CSV) and check it in a
   preview before anything is saved.
 - **Yamtrack import**, nightly database snapshots, and JSON export.
@@ -251,6 +252,25 @@ list has **TV shows** ticked.
   and their groups, choose what the list holds so details fill in automatically, and add, rename, reorder or
   remove fields. Changes on a list's settings page are kept until you press **Save settings** in the bar
   pinned to the bottom of the screen, and the page warns you before you leave with unsaved changes.
+- **Sharing a list:** open the list's settings. Under **Sharing**, choose **Can view** or **Can edit** next to
+  anyone else with an account here, then press **Save settings**. An admin adds accounts under **Admin → Users**.
+  - **What's shared:** the list's items, fields and photos.
+  - **What's personal:** each person keeps their own status, rating, favorites, notes, logs and TV episodes. You
+    can both rate the same whiskey, and each of you gets your own "next episode".
+  - **Can edit:** add items, and change them for everyone (name, fields, tags, photos, details). Only the list's
+    owner can delete an item someone else has tracked, or move it to another list.
+  - **Can view:** see the list and keep your own progress, without changing its items.
+  - **On an item's page**, **Household** shows everyone else's status, rating, notes and logs.
+  - **Where shared lists appear:** after your own lists in the sidebar and under **Manage lists**, with the
+    owner's name. Their address ends in `@owner` (`/c/whiskey@daniel`), since two people can each have a
+    "whiskey" list.
+  - **On a list shared with you**, its settings page lets you turn its Up next and Calendar on or off for
+    yourself, or **Leave list**. Only the owner can rename it, change its statuses or fields, import a
+    spreadsheet into it, or delete it.
+  - **Stopping:** set someone back to **Not shared**, or they can leave. Their ratings and logs are kept, and
+    come back if the list is shared again. Deleting the list deletes everyone's progress on it.
+  - **Journal, Recent activity, Up next and Favorites** show only your own logs and progress, shared lists
+    included. The JSON export includes your progress on lists shared with you.
 - **Up next** on the home page shows items in a planned status (Wishlist, Want to see…). To keep a long wish
   list off the home page, untick **Show in Up next on the home page** in that list's settings. Its items stay
   in the list, and favorites from it still appear under Favorites.

@@ -9,7 +9,7 @@ const PAGE = 120;
 export const load: PageServerLoad = async ({ locals, url }) => {
 	const userId = locals.user!.id;
 	const sp = url.searchParams;
-	// ?list=<slug> narrows everything to one list
+	// ?list=<slug> narrows everything to one list (slug@owner for a list shared with you)
 	const list = listCategories(userId).find((c) => c.slug === sp.get('list')) ?? null;
 	const today = todayIso();
 	const range = resolveRange(

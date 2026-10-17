@@ -3,7 +3,7 @@ import { rawDb } from '../db';
 import { tmdbSeason, tmdbTvShow } from '../providers/tmdb';
 import { ProviderError } from '../providers/util';
 import { getCategoryById } from './categories';
-import { addLog, deleteLog, getOwnedItem, type LogInput, updateItem } from './items';
+import { addLog, deleteLog, getItem, setProgress, type LogInput, updateItem } from './items';
 import {
 	boundarySeason,
 	buildGuide,
@@ -28,8 +28,10 @@ export class EpisodeError extends Error {}
 
 type Show = Item & { providerId: string };
 
+// Episodes are each person's own: on a shared list, everyone tracks where they are in a show.
+
 export function trackedShow(userId: number, itemId: number): Show {
-	const item = getOwnedItem(userId, itemId);
+	const item = getItem(userId, itemId);
 	if (!isTrackedShow(item)) error(400, 'Episodes are tracked for shows linked to TMDB');
 	return item as Show;
 }
@@ -108,14 +110,14 @@ async function episodeTitle(tmdbId: string, season: number, episode: number): Pr
 
 // --- Plays ------------------------------------------------------------------------------
 
-/** Each episode watched, with its number of plays and the newest play's id */
-export function watchedEpisodes(itemId: number): WatchedEpisode[] {
+/** Each episode someone has watched, with its number of plays and the newest play's id */
+export function watchedEpisodes(itemId: number, userId: number): WatchedEpisode[] {
 	return rawDb()
 		.prepare(
 			`SELECT season, episode, COUNT(*) AS plays, MAX(id) AS lastId FROM episode_watches
-			 WHERE item_id = ? GROUP BY season, episode`
+			 WHERE item_id = ? AND user_id = ? GROUP BY season, episode`
 		)
-		.all(itemId) as WatchedEpisode[];
+		.all(itemId, userId) as WatchedEpisode[];
 }
 
 export interface Play {
@@ -128,15 +130,15 @@ export interface Play {
 }
 
 /** Plays of a season's episodes, newest first, by episode number */
-export function seasonPlays(itemId: number, season: number) {
+export function seasonPlays(itemId: number, userId: number, season: number) {
 	const rows = rawDb()
 		.prepare(
 			`SELECT w.id, w.episode, w.log_id AS logId, COALESCE(l.date, w.watched_at) AS date,
 				(SELECT COUNT(*) - 1 FROM episode_watches o WHERE o.log_id = w.log_id) AS shared
 			 FROM episode_watches w LEFT JOIN item_logs l ON l.id = w.log_id
-			 WHERE w.item_id = ? AND w.season = ? ORDER BY w.id DESC`
+			 WHERE w.item_id = ? AND w.user_id = ? AND w.season = ? ORDER BY w.id DESC`
 		)
-		.all(itemId, season) as (Play & { episode: number })[];
+		.all(itemId, userId, season) as (Play & { episode: number })[];
 	const out = new Map<number, Play[]>();
 	for (const { episode, ...p } of rows) {
 		const list = out.get(episode) ?? [];
@@ -165,7 +167,7 @@ export function insertWatches(
 ) {
 	const sqlite = rawDb();
 	const exists = sqlite.prepare(
-		'SELECT 1 FROM episode_watches WHERE item_id = ? AND season = ? AND episode = ? LIMIT 1'
+		'SELECT 1 FROM episode_watches WHERE item_id = ? AND user_id = ? AND season = ? AND episode = ? LIMIT 1'
 	);
 	const insert = sqlite.prepare(
 		`INSERT INTO episode_watches (user_id, item_id, log_id, season, episode, title, watched_at, created_at)
@@ -175,7 +177,7 @@ export function insertWatches(
 	return sqlite.transaction(() => {
 		let added = 0;
 		for (const p of plays) {
-			if (onlyNew && exists.get(itemId, p.season, p.episode)) continue;
+			if (onlyNew && exists.get(itemId, userId, p.season, p.episode)) continue;
 			insert.run(userId, itemId, logId, p.season, p.episode, p.title ?? null, p.watchedAt ?? null, now);
 			added++;
 		}
@@ -183,9 +185,9 @@ export function insertWatches(
 	})();
 }
 
-/** A check-in without a log still counts as activity on the show */
-function touch(itemId: number) {
-	rawDb().prepare('UPDATE items SET updated_at = ? WHERE id = ?').run(Date.now(), itemId);
+/** A check-in without a log still counts as activity on the show (for whoever checked in) */
+function touch(userId: number, item: Show) {
+	setProgress(userId, item, {});
 }
 
 const episodeKey = (p: { season: number; episode: number }) => `${p.season}:${p.episode}`;
@@ -211,13 +213,13 @@ async function settleStatus(
 	firstWatch: boolean,
 	today: string
 ): Promise<StatusChange | null> {
-	const current = getOwnedItem(userId, item.id).status;
+	const current = getItem(userId, item.id).status;
 	const group = statuses.find((s) => s.key === current)?.group;
 	const active = statuses.find((s) => s.group === 'active')?.key;
 	const done = statuses.find((s) => s.group === 'done')?.key;
 	let tracker: Tracker | null = null;
 	try {
-		tracker = computeTracker(await episodeGuide(item.providerId, today), watchedEpisodes(item.id));
+		tracker = computeTracker(await episodeGuide(item.providerId, today), watchedEpisodes(item.id, userId));
 	} catch {
 		/* TMDB is down: whether this finished the show isn't known */
 	}
@@ -272,9 +274,9 @@ export async function watchEpisode(
 		.prepare(
 			`SELECT w.id, w.log_id AS logId, w.created_at AS createdAt, l.date FROM episode_watches w
 			 LEFT JOIN item_logs l ON l.id = w.log_id
-			 WHERE w.item_id = ? AND w.season = ? AND w.episode = ? ORDER BY w.id DESC LIMIT 1`
+			 WHERE w.item_id = ? AND w.user_id = ? AND w.season = ? AND w.episode = ? ORDER BY w.id DESC LIMIT 1`
 		)
-		.get(item.id, pick.season, pick.episode) as
+		.get(item.id, userId, pick.season, pick.episode) as
 		{ id: number; logId: number | null; createdAt: number; date: string | null } | undefined;
 	const base = { ...pick, title, status: null };
 	if (quick && prev && Date.now() - prev.createdAt < DOUBLE_TAP_MS && prev.date === (log?.date ?? null)) {
@@ -299,7 +301,7 @@ export async function watchEpisode(
 		}).id;
 	} else {
 		watchId = insert(null);
-		touch(item.id);
+		touch(userId, item);
 	}
 	const status = await settleStatus(userId, item, category.statuses, !prev, today);
 	return { ...base, watchId, logId, duplicate: false, status };
@@ -347,7 +349,7 @@ export async function markRemaining(userId: number, itemId: number, today: strin
 
 async function markPlays(userId: number, item: Show, plays: NewPlay[], log: LogInput | null, today: string) {
 	const { category } = getCategoryById(userId, item.categoryId);
-	const have = new Set(watchedEpisodes(item.id).map(episodeKey));
+	const have = new Set(watchedEpisodes(item.id, userId).map(episodeKey));
 	const fresh = plays.filter((p) => !have.has(episodeKey(p)));
 	if (!fresh.length) return { added: 0, logId: null, status: null };
 	let added = 0;
@@ -359,7 +361,7 @@ async function markPlays(userId: number, item: Show, plays: NewPlay[], log: LogI
 		}).id;
 	} else {
 		added = insertWatches(userId, item.id, fresh);
-		touch(item.id);
+		touch(userId, item);
 	}
 	const status = await settleStatus(userId, item, category.statuses, added > 0, today);
 	return { added, logId, status };
@@ -390,16 +392,20 @@ export function unwatchEpisode(userId: number, itemId: number, season: number, e
 		const removed = sqlite
 			.prepare(
 				`SELECT id, title, watched_at AS watchedAt, created_at AS createdAt FROM episode_watches
-				 WHERE item_id = ? AND season = ? AND episode = ? AND ${UNDATED}`
+				 WHERE item_id = ? AND user_id = ? AND season = ? AND episode = ? AND ${UNDATED}`
 			)
-			.all(itemId, season, episode) as UndatedPlay[];
+			.all(itemId, userId, season, episode) as UndatedPlay[];
 		sqlite
-			.prepare(`DELETE FROM episode_watches WHERE item_id = ? AND season = ? AND episode = ? AND ${UNDATED}`)
-			.run(itemId, season, episode);
+			.prepare(
+				`DELETE FROM episode_watches WHERE item_id = ? AND user_id = ? AND season = ? AND episode = ? AND ${UNDATED}`
+			)
+			.run(itemId, userId, season, episode);
 		const kept = (
 			sqlite
-				.prepare('SELECT COUNT(*) AS n FROM episode_watches WHERE item_id = ? AND season = ? AND episode = ?')
-				.get(itemId, season, episode) as { n: number }
+				.prepare(
+					'SELECT COUNT(*) AS n FROM episode_watches WHERE item_id = ? AND user_id = ? AND season = ? AND episode = ?'
+				)
+				.get(itemId, userId, season, episode) as { n: number }
 		).n;
 		return { removed, kept };
 	})();
@@ -449,12 +455,14 @@ export function unmarkSeason(userId: number, itemId: number, season: number) {
 	const sqlite = rawDb();
 	return sqlite.transaction(() => {
 		const removed = sqlite
-			.prepare(`DELETE FROM episode_watches WHERE item_id = ? AND season = ? AND ${UNDATED}`)
-			.run(itemId, season).changes;
+			.prepare(`DELETE FROM episode_watches WHERE item_id = ? AND user_id = ? AND season = ? AND ${UNDATED}`)
+			.run(itemId, userId, season).changes;
 		const kept = (
 			sqlite
-				.prepare('SELECT COUNT(DISTINCT episode) AS n FROM episode_watches WHERE item_id = ? AND season = ?')
-				.get(itemId, season) as { n: number }
+				.prepare(
+					'SELECT COUNT(DISTINCT episode) AS n FROM episode_watches WHERE item_id = ? AND user_id = ? AND season = ?'
+				)
+				.get(itemId, userId, season) as { n: number }
 		).n;
 		return { removed, kept };
 	})();
@@ -542,7 +550,12 @@ export function applySavedProgress(userId: number, itemId: number, guide: Episod
 		const season = Number(custom.current_season);
 		const episode = Number(custom.current_episode);
 		if (!Number.isInteger(season) || season < 1) return 'none';
-		if (sqlite.prepare('SELECT 1 FROM episode_watches WHERE item_id = ? LIMIT 1').get(itemId)) return 'none';
+		if (
+			sqlite
+				.prepare('SELECT 1 FROM episode_watches WHERE item_id = ? AND user_id = ? LIMIT 1')
+				.get(itemId, userId)
+		)
+			return 'none';
 		if (!guide.seasons.some((s) => s.number === season)) return 'unmatched';
 		const upTo = Number.isInteger(episode) && episode > 0 ? episode : 0;
 		const plays = guide.seasons
@@ -574,7 +587,7 @@ export async function loadTracker(userId: number, item: Show, today: string): Pr
 	try {
 		const guide = await episodeGuide(item.providerId, today);
 		const applied = applySavedProgress(userId, item.id, guide);
-		const t = computeTracker(guide, watchedEpisodes(item.id));
+		const t = computeTracker(guide, watchedEpisodes(item.id, userId));
 		let next: Extract<TrackerView, { ok: true }>['next'] = null;
 		if (t.next) {
 			const ep = await tmdbSeason(item.providerId, t.next.season)
@@ -594,7 +607,8 @@ export async function loadTracker(userId: number, item: Show, today: string): Pr
 		};
 	} catch (e) {
 		const bySeason = new Map<number, number>();
-		for (const w of watchedEpisodes(item.id)) bySeason.set(w.season, (bySeason.get(w.season) ?? 0) + 1);
+		for (const w of watchedEpisodes(item.id, userId))
+			bySeason.set(w.season, (bySeason.get(w.season) ?? 0) + 1);
 		const seasons = [...bySeason]
 			.map(([number, watched]) => ({ number, watched }))
 			.sort((a, b) => (a.number || Infinity) - (b.number || Infinity));
@@ -610,7 +624,7 @@ export async function loadTracker(userId: number, item: Show, today: string): Pr
 /** One season's episodes with their plays, for the item page. Without TMDB, only the episodes watched. */
 export async function seasonView(userId: number, itemId: number, season: number, today: string) {
 	const item = trackedShow(userId, itemId);
-	const plays = seasonPlays(item.id, season);
+	const plays = seasonPlays(item.id, userId, season);
 	try {
 		const episodes = await seasonEpisodes(item.providerId, season, today);
 		const listed = new Set(episodes.map((e) => e.number));

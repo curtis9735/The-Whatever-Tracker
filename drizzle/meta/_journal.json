@@ -57,6 +57,20 @@
       "when": 1792182386147,
       "tag": "0007_episode_watches",
       "breakpoints": true
+    },
+    {
+      "idx": 8,
+      "version": "6",
+      "when": 1792214809165,
+      "tag": "0008_list_sharing",
+      "breakpoints": true
+    },
+    {
+      "idx": 9,
+      "version": "6",
+      "when": 1792247062267,
+      "tag": "0009_sharing_indexes",
+      "breakpoints": true
     }
   ]
 }

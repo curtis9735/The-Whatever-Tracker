@@ -1,27 +1,71 @@
 import { error, fail, redirect } from '@sveltejs/kit';
-import { getCategoryById, getCategoryBySlug, listCategories } from '$lib/server/services/categories';
-import { addImage, createItem, imageSourcesFromForm, listUserTags } from '$lib/server/services/items';
+import { editableCategories, getCategoryById, getCategoryBySlug } from '$lib/server/services/categories';
+import {
+	addImage,
+	createItem,
+	getItem,
+	imageSourcesFromForm,
+	tagSuggestions
+} from '$lib/server/services/items';
 import { firstLogDate, parseEpisodePick, parseItemForm, parseLogForm, todayIso } from '$lib/server/forms';
-import { applySavedProgressNow } from '$lib/server/services/episodes';
+import {
+	applySavedProgressNow,
+	episodeGuide,
+	insertWatches,
+	tmdbProblem
+} from '$lib/server/services/episodes';
 import { addLogWithShow, afterAddPath, SHOW_LOOKUP_FAILED } from '$lib/server/services/concerts';
 import { ImageError } from '$lib/server/images/store';
 import { findExisting, linkToProvider, lookupFailure, parseMatch } from '$lib/server/services/provider-items';
 import type { Actions, PageServerLoad } from './$types';
 
+/** "Already have it": on one of the viewer's lists, or on a list shared with them */
+function alreadyHave(userId: number, existingId: number) {
+	const { category } = getCategoryById(userId, getItem(userId, existingId).categoryId);
+	return category.access === 'owner'
+		? 'That one is already in your library.'
+		: `That one is already in ${category.ownerName}'s library.`;
+}
+
+/**
+ * Someone adding a show to a list shared with them: the last episode they watched marks it and every
+ * aired episode before it, for them (progress saved on the item would be the list owner's).
+ */
+async function markWatchedUpTo(
+	userId: number,
+	itemId: number,
+	tmdbId: string,
+	upTo: { season: number; episode: number }
+) {
+	const guide = await episodeGuide(tmdbId, todayIso());
+	const plays = guide.seasons
+		.filter((s) => s.number > 0 && s.number <= upTo.season)
+		.flatMap((s) =>
+			s.aired
+				.filter((e) => s.number < upTo.season || e <= upTo.episode)
+				.map((episode) => ({ season: s.number, episode }))
+		);
+	insertWatches(userId, itemId, plays);
+}
+
 export const load: PageServerLoad = async ({ locals, url }) => {
 	const userId = locals.user!.id;
-	const categories = listCategories(userId);
-	if (!categories.length) redirect(303, '/categories/new');
+	// The viewer's own lists, and lists shared with them to edit
+	const lists = editableCategories(userId);
+	if (!lists.length) redirect(303, '/categories/new');
 	const slug = url.searchParams.get('category');
 	// Scanned products belong in a hand-made list (whiskey, sauces…), not a movie or game list
 	const fallback =
-		(url.searchParams.has('barcode') && categories.find((c) => c.providerKinds.length === 0)) ||
-		categories[0];
-	const chosen = slug ? getCategoryBySlug(userId, slug) : getCategoryById(userId, fallback.id);
+		(url.searchParams.has('barcode') && lists.find((c) => c.providerKinds.length === 0)) || lists[0];
+	const chosen = slug
+		? getCategoryBySlug(userId, slug, 'edit')
+		: getCategoryById(userId, fallback.id, 'edit');
 	const sp = url.searchParams;
 	return {
 		chosen,
-		allTags: listUserTags(userId),
+		lists,
+		// Tags belong to the list's owner; others are offered the ones on lists they can see
+		allTags: tagSuggestions(userId, chosen.category.userId),
 		today: todayIso(),
 		defaults: {
 			title: sp.get('title') ?? '',
@@ -38,7 +82,7 @@ export const actions: Actions = {
 		const form = await request.formData();
 		const categoryId = Number(form.get('categoryId'));
 		if (!categoryId) error(400, 'Missing list');
-		const { category, itemFields, logFields } = getCategoryById(userId, categoryId);
+		const { category, itemFields, logFields } = getCategoryById(userId, categoryId, 'edit');
 
 		const parsed = parseItemForm(form, category, itemFields);
 		if (!parsed.ok) return fail(400, { message: parsed.error });
@@ -51,17 +95,26 @@ export const actions: Actions = {
 		const match = parseMatch(form);
 		if (match) {
 			const existing = findExisting(userId, match.provider, match.kind, match.id);
-			if (existing) {
-				return fail(400, { message: 'That one is already in your library.', existingId: existing });
+			if (existing) return fail(400, { message: alreadyHave(userId, existing), existingId: existing });
+			// An owner has each source entry once, also on lists that aren't shared with the viewer
+			if (
+				category.userId !== userId &&
+				findExisting(category.userId, match.provider, match.kind, match.id, { ownOnly: true })
+			) {
+				return fail(400, {
+					message: `${category.ownerName} already has this in a list that isn't shared with you.`
+				});
 			}
 		}
 
 		// A show from TMDB: the last episode watched marks it and every episode before it. Saved with
 		// the show first, so it isn't lost if TMDB doesn't answer now (the show's page tries again).
+		// Saved progress is the list owner's: on someone else's list it's marked for the viewer instead.
 		const progress =
 			match?.provider === 'tmdb' && match.kind === 'tv' ? parseEpisodePick(form, 'progress_') : null;
 		if (progress === 'invalid') return fail(400, { message: 'Pick the last episode you watched.' });
-		if (progress) {
+		const theirs = category.userId === userId;
+		if (progress && theirs) {
 			parsed.data.custom = {
 				...parsed.data.custom,
 				current_season: progress.season,
@@ -75,7 +128,12 @@ export const actions: Actions = {
 			// Before the user's photos, so the poster becomes the cover
 			try {
 				await linkToProvider(userId, item.id, match);
-				if (progress) await applySavedProgressNow(userId, item.id, todayIso()).catch(() => null);
+				if (progress && theirs) await applySavedProgressNow(userId, item.id, todayIso()).catch(() => null);
+				else if (progress) {
+					await markWatchedUpTo(userId, item.id, match.id, progress).catch((e) =>
+						warnings.push(`Saved, but your episodes couldn't be marked: ${tmdbProblem(e)}`)
+					);
+				}
 			} catch (e) {
 				warnings.push(`Saved, but the details couldn't be loaded: ${lookupFailure(e)}`);
 			}

@@ -4,6 +4,8 @@
 	import { openSearch } from '$lib/search-ui.svelte';
 
 	let { data } = $props();
+	// Lists shared with the viewer only to view can't take new items
+	const lists = $derived(data.categories.filter((c) => c.access !== 'view'));
 </script>
 
 <svelte:head><title>Add · The Whatever Tracker</title></svelte:head>
@@ -32,9 +34,9 @@
 </div>
 
 <h2 class="section-title mb-3">Or add by hand to…</h2>
-{#if data.categories.length}
+{#if lists.length}
 	<div class="grid grid-cols-2 gap-3 sm:grid-cols-3 lg:grid-cols-4">
-		{#each data.categories as c (c.id)}
+		{#each lists as c (c.id)}
 			<a
 				href="/items/new?category={c.slug}"
 				class="card flex items-center gap-3 p-3 hover:bg-surface-2"
@@ -45,7 +47,10 @@
 					style="background: color-mix(in srgb, var(--cat) 16%, transparent)"
 					aria-hidden="true">{c.icon}</span
 				>
-				<span class="truncate font-medium">{c.name}</span>
+				<span class="min-w-0">
+					<span class="block truncate font-medium">{c.name}</span>
+					{#if c.ownerName}<span class="block truncate text-xs text-muted">{c.ownerName}'s</span>{/if}
+				</span>
 			</a>
 		{/each}
 	</div>

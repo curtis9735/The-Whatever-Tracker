@@ -11,12 +11,19 @@ import {
 	type FieldChange
 } from '$lib/server/services/categories';
 import { deleteItem } from '$lib/server/services/items';
+import {
+	householdMembers,
+	leaveList,
+	listSharesOf,
+	saveShares,
+	setMyListSettings
+} from '$lib/server/services/access';
 import { enabledKinds } from '$lib/server/providers/registry';
 import { setlistfmEnabled } from '$lib/server/providers/setlistfm';
 import { CATEGORY_COLORS, KINDS, LOG_SOURCES } from '$lib/kinds';
 import { cleanIcon } from '$lib/icons';
 import { FIELD_TYPES, slugify } from '$lib/fields';
-import type { FieldType } from '$lib/types';
+import type { FieldType, ShareRole } from '$lib/types';
 import type { Actions, PageServerLoad } from './$types';
 
 const StatusList = z
@@ -46,10 +53,19 @@ const FieldList = z
 	.max(200);
 
 export const load: PageServerLoad = async ({ locals, params, url }) => {
-	const cat = getCategoryBySlug(locals.user!.id, params.slug);
+	const userId = locals.user!.id;
+	// Anyone with the list sees this page: its owner the settings, the others their own choices for it
+	const cat = getCategoryBySlug(userId, params.slug);
+	const owner = cat.category.access === 'owner';
 	const enabled = enabledKinds();
+	const roles = new Map<number, ShareRole>();
+	if (owner) for (const s of listSharesOf(cat.category.id)) roles.set(s.id, s.role);
 	return {
 		...cat,
+		/** Everyone else here, and what they can do with the list (the owner's page only) */
+		people: owner
+			? householdMembers(userId).map((p) => ({ ...p, role: roles.get(p.id) ?? ('none' as const) }))
+			: [],
 		itemCount: categoryItemCount(cat.category.id),
 		kinds: KINDS.map((k) => ({ ...k, enabled: enabled.has(k.key) })),
 		logSources: LOG_SOURCES.map((s) => ({ ...s, enabled: setlistfmEnabled() })),
@@ -59,8 +75,14 @@ export const load: PageServerLoad = async ({ locals, params, url }) => {
 };
 
 function ownedCategory(userId: number, slug: string) {
-	return getCategoryBySlug(userId, slug).category;
+	return getCategoryBySlug(userId, slug, 'owner').category;
 }
+
+const SHARE_CHOICES = new Map<string, ShareRole | null>([
+	['none', null],
+	['view', 'view'],
+	['edit', 'edit']
+]);
 
 function parseOptions(raw: string) {
 	return Array.from(
@@ -137,6 +159,17 @@ export const actions: Actions = {
 			fields.push({ ...f, label, unit: f.unit.trim() || null, options });
 		}
 
+		// Sharing: one share_<userId> choice per person on the page (someone added since is left as is)
+		const shares: { userId: number; role: ShareRole | null }[] = [];
+		for (const p of householdMembers(userId)) {
+			const choice = form.get(`share_${p.id}`);
+			if (choice === null) continue;
+			if (!SHARE_CHOICES.has(String(choice))) {
+				return fail(400, { message: 'Sharing could not be read. Reload the page and try again.' });
+			}
+			shares.push({ userId: p.id, role: SHARE_CHOICES.get(String(choice))! });
+		}
+
 		const slug = db().transaction(() => {
 			const s = updateCategory(userId, category.id, {
 				name,
@@ -149,6 +182,7 @@ export const actions: Actions = {
 				showInCalendar: form.has('calendar_setting') ? form.get('showInCalendar') === 'on' : undefined
 			});
 			saveFieldChanges(category.id, fields);
+			saveShares(userId, category.id, shares);
 			return s;
 		});
 		redirect(303, `/categories/${slug}/edit?saved=1`);
@@ -171,6 +205,30 @@ export const actions: Actions = {
 			for (const { id } of ids) await deleteItem(userId, id);
 		}
 		deleteCategory(userId, category.id);
+		redirect(303, '/categories');
+	},
+
+	/** Someone the list is shared with: their own Up next and Calendar choices for it */
+	mine: async ({ request, locals, params }) => {
+		const userId = locals.user!.id;
+		const { category } = getCategoryBySlug(userId, params.slug);
+		const form = await request.formData();
+		setMyListSettings(userId, category.id, {
+			showUpNext: form.get('showUpNext') === 'on',
+			// Only on the page for lists of shows, movies or games; otherwise left as it is
+			showInCalendar: form.has('calendar_setting') ? form.get('showInCalendar') === 'on' : undefined
+		});
+		return { mineSaved: true };
+	},
+
+	/** Someone the list is shared with stops seeing it */
+	leave: async ({ locals, params }) => {
+		const userId = locals.user!.id;
+		const { category } = getCategoryBySlug(userId, params.slug);
+		if (category.access === 'owner') {
+			return fail(400, { leaveMessage: "It's your list: delete it instead." });
+		}
+		leaveList(userId, category.id);
 		redirect(303, '/categories');
 	}
 };

@@ -13,6 +13,12 @@ export type FieldType =
 
 export type FieldScope = 'item' | 'log';
 
+/** What someone a list is shared with can do: edit items, or only keep their own progress */
+export type ShareRole = 'edit' | 'view';
+
+/** The viewer's access to a list: theirs, or shared with them */
+export type ListAccess = 'owner' | ShareRole;
+
 export interface FieldDef {
 	key: string;
 	label: string;

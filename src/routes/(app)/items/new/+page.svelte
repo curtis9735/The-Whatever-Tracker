@@ -7,7 +7,7 @@
 	import LogFields from '$lib/components/LogFields.svelte';
 	import MetadataMatch from '$lib/components/MetadataMatch.svelte';
 	import ShowProgress from '$lib/components/ShowProgress.svelte';
-	import { PROGRESS_KEYS } from '$lib/episodes';
+	import { ownersProgressFields, PROGRESS_KEYS } from '$lib/episodes';
 	import { KIND_BY_KEY, PROVIDER_LABELS, SETLIST_SOURCE } from '$lib/kinds';
 	import { isFinished } from '$lib/status';
 	import type { SearchResult } from '$lib/types';
@@ -38,8 +38,13 @@
 
 	// A show from TMDB: progress is picked from its real episodes instead of typed in
 	const tvMatch = $derived(match?.provider === 'tmdb' && match.kind === 'tv' ? match : null);
+	// …and on someone else's list a show's current season/episode fields are theirs, not the viewer's
 	const formFields = $derived(
-		tvMatch ? data.chosen.itemFields.filter((f) => !PROGRESS_KEYS.includes(f.key)) : data.chosen.itemFields
+		tvMatch ||
+			(data.chosen.category.access !== 'owner' &&
+				ownersProgressFields(null, data.chosen.category.providerKinds))
+			? data.chosen.itemFields.filter((f) => !PROGRESS_KEYS.includes(f.key))
+			: data.chosen.itemFields
 	);
 
 	function onMatch(r: SearchResult | null) {
@@ -74,8 +79,16 @@
 			value={cat.slug}
 			onchange={(e) => switchCategory((e.currentTarget as HTMLSelectElement).value)}
 		>
-			{#each data.categories as c (c.id)}<option value={c.slug}>{c.icon} {c.name}</option>{/each}
+			{#each data.lists as c (c.id)}<option value={c.slug}
+					>{c.icon} {c.name}{c.ownerName ? ` (${c.ownerName}'s)` : ''}</option
+				>{/each}
 		</select>
+		{#if cat.ownerName}
+			<p class="hint">
+				{cat.ownerName}'s list: everyone it's shared with sees what you add. Your status, rating and notes are
+				just yours.
+			</p>
+		{/if}
 		{#if missingSources && !matchKinds.length}
 			<p class="hint">
 				Connect {missingSources} under

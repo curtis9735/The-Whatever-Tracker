@@ -46,15 +46,23 @@
 			>
 
 			<p class="section-title mt-6 mb-2 px-3">Lists</p>
+			<!-- Their own lists, then the ones shared with them (marked, with whose they are on hover) -->
 			{#each data.categories as c (c.id)}
 				<a
 					href="/c/{c.slug}"
 					class="nav-link"
 					class:nav-active={isActive(`/c/${c.slug}`)}
 					style="--cat: {categoryColor(c.color)}"
+					title={c.ownerName ? `${c.ownerName}'s list` : undefined}
 				>
 					<span class="w-5 text-center" aria-hidden="true">{c.icon}</span>
-					<span class="truncate">{c.name}</span>
+					<span class="flex min-w-0 items-center gap-1.5">
+						<span class="truncate">{c.name}</span>
+						{#if c.ownerName}
+							<Icon name="users" size={12} class="shrink-0 text-muted" />
+							<span class="sr-only">{`(${c.ownerName}'s list)`}</span>
+						{/if}
+					</span>
 					<span class="ml-auto text-xs text-muted tabular-nums">{c.itemCount}</span>
 				</a>
 			{/each}

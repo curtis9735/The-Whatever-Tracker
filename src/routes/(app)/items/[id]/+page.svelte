@@ -1,7 +1,7 @@
 <script lang="ts">
 	import { tick } from 'svelte';
 	import { enhance } from '$app/forms';
-	import { logEpisodeLabel, PROGRESS_KEYS, type TrackerView } from '$lib/episodes';
+	import { logEpisodeLabel, ownersProgressFields, PROGRESS_KEYS, type TrackerView } from '$lib/episodes';
 	import { formatFieldValue } from '$lib/fields';
 	import { imageSrc } from '$lib/images';
 	import { categoryColor, PROVIDER_LABELS } from '$lib/kinds';
@@ -16,6 +16,7 @@
 	import MetadataMatch from '$lib/components/MetadataMatch.svelte';
 	import EpisodeSelect from '$lib/components/EpisodeSelect.svelte';
 	import EpisodeTracker from '$lib/components/EpisodeTracker.svelte';
+	import HouseholdProgress from '$lib/components/HouseholdProgress.svelte';
 
 	let { data, form } = $props();
 
@@ -29,12 +30,24 @@
 			year?: string;
 		} | null
 	);
+	// Shared lists: anyone with access keeps their own status, rating, notes, logs and episodes;
+	// changing the item itself (details, photos, links) takes edit access
+	const canEdit = $derived(item.access !== 'view');
+	const shared = $derived(cat.access !== 'owner' || cat.sharedWith > 0);
+	const shareHint = $derived(
+		cat.access !== 'owner'
+			? `${cat.ownerName}'s list · ${cat.access === 'edit' ? 'you can edit' : 'view only'}`
+			: cat.sharedWith > 0
+				? `Shared with ${cat.sharedWith} ${cat.sharedWith === 1 ? 'person' : 'people'}`
+				: null
+	);
 	const coverSrc = $derived(imageSrc(data.cover, 'full'));
 	const statusLabel = $derived(cat.statuses.find((s) => s.key === item.status)?.label);
 	const filledFields = $derived(
 		data.itemFields.filter((f) => {
-			// Shows linked to TMDB: the episode tracker shows progress
-			if (data.tracked && PROGRESS_KEYS.includes(f.key)) return false;
+			// Shows linked to TMDB: the episode tracker shows progress; a saved current season/episode is the owner's
+			const ownersProgress = cat.access !== 'owner' && ownersProgressFields(item, cat.providerKinds);
+			if ((data.tracked || ownersProgress) && PROGRESS_KEYS.includes(f.key)) return false;
 			const v = item.custom[f.key];
 			return v !== undefined && v !== null && v !== '' && !(Array.isArray(v) && !v.length);
 		})
@@ -132,11 +145,19 @@
 
 <svelte:head><title>{item.title} · The Whatever Tracker</title></svelte:head>
 
-<a href="/c/{cat.slug}" class="mb-4 inline-flex items-center gap-1 text-sm text-muted hover:text-fg">
-	<Icon name="chevron-left" size={16} />
-	{cat.icon}
-	{cat.name}
-</a>
+<div class="mb-4 flex flex-wrap items-center gap-x-3 gap-y-1">
+	<a href="/c/{cat.slug}" class="inline-flex items-center gap-1 text-sm text-muted hover:text-fg">
+		<Icon name="chevron-left" size={16} />
+		{cat.icon}
+		{cat.name}
+	</a>
+	{#if shareHint}
+		<span class="inline-flex items-center gap-1 text-xs text-muted">
+			<Icon name="user" size={12} />
+			{shareHint}
+		</span>
+	{/if}
+</div>
 
 {#if data.warn}<p class="error-box mb-4">{data.warn}</p>{/if}
 {#if form?.message}<p class="error-box mb-4">{form.message}</p>{/if}
@@ -178,7 +199,12 @@
 					<Icon name="heart" filled={item.favorite} />
 				</button>
 			</form>
-			<a href="/items/{item.id}/edit" class="btn btn-ghost btn-icon" aria-label="Edit"><Icon name="edit" /></a
+			<!-- View only: the edit page has just their own status, rating, favorite and notes -->
+			<a
+				href="/items/{item.id}/edit"
+				class="btn btn-ghost btn-icon"
+				aria-label={canEdit ? 'Edit' : 'Edit your progress'}
+				title={canEdit ? undefined : 'Your progress'}><Icon name="edit" /></a
 			>
 		</div>
 
@@ -278,12 +304,12 @@
 
 		{#if item.notes}
 			<div class="mt-5">
-				<h2 class="section-title mb-1">Notes</h2>
+				<h2 class="section-title mb-1">{shared ? 'Your notes' : 'Notes'}</h2>
 				<p class="text-sm whitespace-pre-line">{item.notes}</p>
 			</div>
 		{/if}
 
-		{#if canLink}
+		{#if canLink && canEdit}
 			<section class="card mt-5 p-4">
 				{#if !linkOpen}
 					<div class="flex flex-wrap items-center gap-3">
@@ -363,7 +389,7 @@
 							<Icon name="external" size={14} /> Open source page
 						</a>
 					{/if}
-					{#if item.provider && PROVIDER_LABELS[item.provider]}
+					{#if canEdit && item.provider && PROVIDER_LABELS[item.provider]}
 						<form
 							method="POST"
 							action="?/refresh"
@@ -398,57 +424,74 @@
 								>
 									<img src={imageSrc(img)} alt="" loading="lazy" class="h-full w-full object-cover" />
 								</button>
-								<div class="mt-1 flex gap-1">
-									{#if data.cover?.id !== img.id}
-										<form method="POST" action="?/cover" use:enhance>
-											<input type="hidden" name="imageId" value={img.id} />
-											<button class="btn btn-ghost btn-sm px-2" title="Use as cover">Cover</button>
-										</form>
-									{:else}
-										<span class="badge">Cover</span>
-									{/if}
-									<form
-										method="POST"
-										action="?/deleteImage"
-										use:enhance={({ cancel }) => {
-											if (!confirm('Delete this photo?')) cancel();
-										}}
-									>
-										<input type="hidden" name="imageId" value={img.id} />
-										<button class="btn btn-ghost btn-sm px-2 text-danger" aria-label="Delete photo"
-											><Icon name="trash" size={14} /></button
+								{#if canEdit}
+									<div class="mt-1 flex gap-1">
+										{#if data.cover?.id !== img.id}
+											<form method="POST" action="?/cover" use:enhance>
+												<input type="hidden" name="imageId" value={img.id} />
+												<button class="btn btn-ghost btn-sm px-2" title="Use as cover">Cover</button>
+											</form>
+										{:else}
+											<span class="badge">Cover</span>
+										{/if}
+										<form
+											method="POST"
+											action="?/deleteImage"
+											use:enhance={({ cancel }) => {
+												if (!confirm('Delete this photo?')) cancel();
+											}}
 										>
-									</form>
-								</div>
+											<input type="hidden" name="imageId" value={img.id} />
+											<button class="btn btn-ghost btn-sm px-2 text-danger" aria-label="Delete photo"
+												><Icon name="trash" size={14} /></button
+											>
+										</form>
+									</div>
+								{/if}
 							</div>
 						{/each}
 					</div>
+				{:else if !canEdit}
+					<p class="text-sm text-muted">No photos yet.</p>
 				{/if}
-				<form
-					method="POST"
-					action="?/addImages"
-					enctype="multipart/form-data"
-					class="space-y-3"
-					use:enhance={() => {
-						busy = true;
-						return async ({ update }) => {
-							await update();
-							busy = false;
-						};
-					}}
-				>
-					{#if form?.imageError}<p class="error-box">{form.imageError}</p>{/if}
-					<ImagePicker prefix="img_" label="Add photos" />
-					<button class="btn btn-primary btn-sm" disabled={busy}>{busy ? 'Uploading…' : 'Save photos'}</button
+				{#if canEdit}
+					<form
+						method="POST"
+						action="?/addImages"
+						enctype="multipart/form-data"
+						class="space-y-3"
+						use:enhance={() => {
+							busy = true;
+							return async ({ update }) => {
+								await update();
+								busy = false;
+							};
+						}}
 					>
-				</form>
+						{#if form?.imageError}<p class="error-box">{form.imageError}</p>{/if}
+						<ImagePicker prefix="img_" label="Add photos" />
+						<button class="btn btn-primary btn-sm" disabled={busy}
+							>{busy ? 'Uploading…' : 'Save photos'}</button
+						>
+					</form>
+				{/if}
 			</section>
+		{/if}
+
+		{#if data.household.length}
+			<!-- Everyone else with this list who has tracked it: their own status, rating, notes and logs -->
+			<HouseholdProgress
+				people={data.household}
+				statuses={cat.statuses}
+				logFields={data.logFields}
+				tracked={data.tracked}
+			/>
 		{/if}
 
 		<!-- Logs -->
 		<section class="mt-8">
 			<div class="mb-3 flex items-center justify-between">
-				<h2 class="text-lg font-semibold">History</h2>
+				<h2 class="text-lg font-semibold">{shared ? 'Your history' : 'History'}</h2>
 				<button
 					class="btn btn-primary btn-sm"
 					onclick={() => (logOpen ? (logOpen = false) : openLog())}
@@ -623,16 +666,27 @@
 			{/if}
 		</section>
 
-		<form
-			method="POST"
-			action="?/delete"
-			class="mt-12 border-t border-border pt-6"
-			use:enhance={({ cancel }) => {
-				if (!confirm(`Delete “${item.title}” and all its logs and photos? This cannot be undone.`)) cancel();
-			}}
-		>
-			<button class="btn btn-ghost btn-sm text-danger"><Icon name="trash" size={14} /> Delete item</button>
-		</form>
+		{#if data.canDelete}
+			<form
+				method="POST"
+				action="?/delete"
+				class="mt-12 border-t border-border pt-6"
+				use:enhance={({ cancel }) => {
+					// Others who tracked it lose their progress too
+					const what = data.household.length
+						? 'its photos and everyone’s logs and progress'
+						: 'all its logs and photos';
+					if (!confirm(`Delete “${item.title}” and ${what}? This cannot be undone.`)) cancel();
+				}}
+			>
+				<button class="btn btn-ghost btn-sm text-danger"><Icon name="trash" size={14} /> Delete item</button>
+			</form>
+		{:else if canEdit}
+			<p class="mt-12 border-t border-border pt-6 text-sm text-muted">
+				{data.household.length ? 'Others have' : 'Someone this list was shared with before has'} tracked this, so
+				only {cat.ownerName} can delete it.
+			</p>
+		{/if}
 	</div>
 </div>
 

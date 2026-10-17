@@ -6,7 +6,7 @@ import {
 	addImage,
 	deleteImage,
 	deleteLog,
-	getOwnedItem,
+	getItem,
 	getOwnedLog,
 	imageSourcesFromForm,
 	updateLog
@@ -34,7 +34,8 @@ function logId(params: { id: string }) {
 export const load: PageServerLoad = async ({ locals, params, url }) => {
 	const userId = locals.user!.id;
 	const log = getOwnedLog(userId, logId(params));
-	const item = getOwnedItem(userId, log.itemId);
+	// Logs are each person's own: seeing the list is enough
+	const item = getItem(userId, log.itemId);
 	const cat = getCategoryById(userId, item.categoryId);
 	const images = db()
 		.select()
@@ -71,7 +72,7 @@ export const actions: Actions = {
 	save: async ({ request, locals, params }) => {
 		const userId = locals.user!.id;
 		const log = getOwnedLog(userId, logId(params));
-		const item = getOwnedItem(userId, log.itemId);
+		const item = getItem(userId, log.itemId);
 		const { category, logFields } = getCategoryById(userId, item.categoryId);
 		const form = await request.formData();
 		const parsed = parseLogForm(form, category, logFields);

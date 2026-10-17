@@ -1,6 +1,6 @@
 import { sql } from 'drizzle-orm';
 import { index, integer, primaryKey, real, sqliteTable, text, uniqueIndex } from 'drizzle-orm/sqlite-core';
-import type { FieldScope, FieldType, StatusDef } from '$lib/types';
+import type { FieldScope, FieldType, ShareRole, StatusDef } from '$lib/types';
 
 const createdAt = () =>
 	integer('created_at', { mode: 'timestamp_ms' })
@@ -118,6 +118,8 @@ export const items = sqliteTable(
 	},
 	(t) => [
 		index('items_user_category_idx').on(t.userId, t.categoryId),
+		// A list's items for anyone it's shared with (items.user_id is its owner, not them)
+		index('items_category_idx').on(t.categoryId),
 		index('items_user_barcode_idx').on(t.userId, t.barcode),
 		// NULL providers never collide in SQLite unique indexes, so manual items are unaffected
 		uniqueIndex('items_user_provider_idx').on(t.userId, t.provider, t.providerKind, t.providerId)
@@ -169,7 +171,13 @@ export const images = sqliteTable(
 		sortOrder: integer('sort_order').notNull().default(0),
 		createdAt: createdAt()
 	},
-	(t) => [index('images_item_idx').on(t.itemId), index('images_log_idx').on(t.logId)]
+	(t) => [
+		index('images_item_idx').on(t.itemId),
+		index('images_log_idx').on(t.logId),
+		// Someone else's photo is served after finding which item it belongs to
+		index('images_path_idx').on(t.path),
+		index('images_thumb_idx').on(t.thumbPath)
+	]
 );
 
 export const tags = sqliteTable(
@@ -228,6 +236,56 @@ export const episodeWatches = sqliteTable(
 	]
 );
 
+/**
+ * A list shared with someone else in the household. The list, its items, fields and photos stay the
+ * owner's; each person keeps their own status, rating, favorites, notes, logs and episodes.
+ */
+export const listShares = sqliteTable(
+	'list_shares',
+	{
+		categoryId: integer('category_id')
+			.notNull()
+			.references(() => categories.id, { onDelete: 'cascade' }),
+		userId: integer('user_id')
+			.notNull()
+			.references(() => users.id, { onDelete: 'cascade' }),
+		/** 'edit' can add, change and remove items; 'view' only keeps their own progress */
+		role: text('role').$type<ShareRole>().notNull().default('edit'),
+		/** This person's own choice: the list's planned items in their Up next */
+		showUpNext: integer('show_up_next', { mode: 'boolean' }).notNull().default(true),
+		/** This person's own choice: the list's releases in their Calendar */
+		showInCalendar: integer('show_in_calendar', { mode: 'boolean' }).notNull().default(true),
+		createdAt: createdAt()
+	},
+	(t) => [primaryKey({ columns: [t.categoryId, t.userId] }), index('list_shares_user_idx').on(t.userId)]
+);
+
+/**
+ * Someone's own progress on an item in a list shared with them. The owner's progress stays on the
+ * item itself (items.status, rating…), so lists nobody else sees work exactly as before.
+ */
+export const itemProgress = sqliteTable(
+	'item_progress',
+	{
+		itemId: integer('item_id')
+			.notNull()
+			.references(() => items.id, { onDelete: 'cascade' }),
+		userId: integer('user_id')
+			.notNull()
+			.references(() => users.id, { onDelete: 'cascade' }),
+		status: text('status'),
+		/** 0–100 in tens, like items.rating */
+		rating: integer('rating'),
+		favorite: integer('favorite', { mode: 'boolean' }).notNull().default(false),
+		notes: text('notes'),
+		lastLoggedAt: text('last_logged_at'),
+		updatedAt: integer('updated_at', { mode: 'timestamp_ms' })
+			.notNull()
+			.$defaultFn(() => new Date())
+	},
+	(t) => [primaryKey({ columns: [t.itemId, t.userId] }), index('item_progress_user_idx').on(t.userId)]
+);
+
 /** Air and release dates for items linked to TMDB or IGDB (TV episodes, movies, games), for the Calendar */
 export const releases = sqliteTable(
 	'releases',
@@ -247,7 +305,12 @@ export const releases = sqliteTable(
 		/** Episode name, when there is one */
 		title: text('title')
 	},
-	(t) => [index('releases_user_date_idx').on(t.userId, t.date), index('releases_item_idx').on(t.itemId)]
+	(t) => [
+		index('releases_user_date_idx').on(t.userId, t.date),
+		index('releases_item_idx').on(t.itemId),
+		// The Calendar shows releases of shared lists too, so it looks them up by date
+		index('releases_date_idx').on(t.date)
+	]
 );
 
 /** App-wide settings edited in the UI (e.g. API keys). Values here override the stack's env vars. */
@@ -273,3 +336,5 @@ export type Item = typeof items.$inferSelect;
 export type ItemLog = typeof itemLogs.$inferSelect;
 export type Image = typeof images.$inferSelect;
 export type EpisodeWatch = typeof episodeWatches.$inferSelect;
+export type ListShare = typeof listShares.$inferSelect;
+export type ItemProgress = typeof itemProgress.$inferSelect;
