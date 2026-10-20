@@ -274,7 +274,14 @@ export function computeTracker(guide: EpisodeGuide, rows: WatchedEpisode[]): Tra
 export type TrackerView =
 	| (Omit<Tracker, 'next'> & {
 			ok: true;
-			next: (NonNullable<Tracker['next']> & { title: string | null; airDate: string | null }) | null;
+			next:
+				| (NonNullable<Tracker['next']> & {
+						title: string | null;
+						airDate: string | null;
+						/** Its length in minutes, when TMDB says (for a live check-in) */
+						runtime: number | null;
+				  })
+				| null;
 			/** Saved progress TMDB has no season for, e.g. "S35 E78" */
 			unmatchedProgress: string | null;
 	  })

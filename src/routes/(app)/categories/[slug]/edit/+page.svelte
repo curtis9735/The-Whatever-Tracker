@@ -618,7 +618,7 @@
 			</section>
 
 			<!-- One Save for the whole page, always in reach -->
-			<div class="sticky bottom-20 z-10 md:bottom-4">
+			<div class="sticky bottom-[calc(5rem+var(--watch-bar,0px))] z-10 md:bottom-4">
 				<div class="card flex flex-wrap items-center gap-3 p-3 shadow-lg">
 					<button class="btn btn-primary" disabled={saving}>{saving ? 'Saving…' : 'Save settings'}</button>
 					{#if form?.message}

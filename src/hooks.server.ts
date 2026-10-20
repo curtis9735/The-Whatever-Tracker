@@ -12,6 +12,7 @@ import {
 } from '$lib/server/auth';
 import { startBackupScheduler } from '$lib/server/backup';
 import { startReleaseScheduler } from '$lib/server/services/releases';
+import { startWatchingScheduler } from '$lib/server/services/watching';
 
 export const init: ServerInit = async () => {
 	const c = cfg();
@@ -25,6 +26,7 @@ export const init: ServerInit = async () => {
 	ensureSetupCode();
 	startBackupScheduler();
 	startReleaseScheduler();
+	startWatchingScheduler();
 	console.log(`[startup] data directory: ${c.dataDir}`);
 };
 

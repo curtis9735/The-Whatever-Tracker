@@ -260,12 +260,18 @@ export async function watchEpisode(
 	pick: { season: number; episode: number },
 	log: LogInput | null,
 	today: string,
-	/** A one-tap check-in: a second tap within a minute is the same check-in */
-	{ quick = false }: { quick?: boolean } = {}
+	opts: {
+		/** A one-tap check-in: a second tap within a minute is the same check-in */
+		quick?: boolean;
+		/** The episode's name, already known (a live check-in saved it): TMDB isn't asked */
+		title?: string | null;
+	} = {}
 ): Promise<WatchResult> {
+	const quick = opts.quick ?? false;
 	const item = trackedShow(userId, itemId);
 	if (!validEpisode(pick.season, pick.episode)) throw new EpisodeError('Pick a season and episode.');
-	const title = await episodeTitle(item.providerId, pick.season, pick.episode);
+	const title =
+		'title' in opts ? (opts.title ?? null) : await episodeTitle(item.providerId, pick.season, pick.episode);
 	const { category } = getCategoryById(userId, item.categoryId);
 	const sqlite = rawDb();
 
@@ -596,7 +602,8 @@ export async function loadTracker(userId: number, item: Show, today: string): Pr
 			next = {
 				...t.next,
 				title: ep?.name?.trim() || null,
-				airDate: ep?.air_date ?? null
+				airDate: ep?.air_date ?? null,
+				runtime: ep?.runtime ?? null
 			};
 		}
 		return {

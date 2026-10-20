@@ -283,6 +283,20 @@ export async function tmdbMovieRelease(id: string, signal?: AbortSignal): Promis
 	return isDate(movie.release_date) ? [{ kind: 'movie', date: movie.release_date }] : [];
 }
 
+/** A movie's full answer (with credits), shared by the details and the runtime look-up */
+function movieDetails(id: string, signal?: AbortSignal) {
+	return cached(`tmdb:movie:${id}`, 7 * DAY, () =>
+		tmdbGet(`/movie/${id}`, { append_to_response: 'credits' }, signal)
+	);
+}
+
+/** A movie's length in minutes (for a live check-in), or null when TMDB doesn't say */
+export async function tmdbMovieRuntime(id: string, signal?: AbortSignal): Promise<number | null> {
+	if (!/^\d+$/.test(id)) throw new Error('Bad TMDB id');
+	const json = (await movieDetails(id, signal)) as { runtime?: number | null };
+	return typeof json.runtime === 'number' && json.runtime > 0 ? json.runtime : null;
+}
+
 export const tmdb: Provider = {
 	id: 'tmdb',
 	label: 'TMDB',
@@ -304,10 +318,7 @@ export const tmdb: Provider = {
 	async details(kind, id, signal) {
 		if (!/^\d+$/.test(id)) throw new Error('Bad TMDB id');
 		if (kind === 'movie') {
-			const json = await cached(`tmdb:movie:${id}`, 7 * DAY, () =>
-				tmdbGet(`/movie/${id}`, { append_to_response: 'credits' }, signal)
-			);
-			return normalizeTmdbMovie(json);
+			return normalizeTmdbMovie(await movieDetails(id, signal));
 		}
 		if (kind === 'tv') {
 			const json = await cached(`tmdb:tv:${id}`, 7 * DAY, () =>

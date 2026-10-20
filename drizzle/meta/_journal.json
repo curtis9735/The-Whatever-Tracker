@@ -71,6 +71,13 @@
       "when": 1792247062267,
       "tag": "0009_sharing_indexes",
       "breakpoints": true
+    },
+    {
+      "idx": 10,
+      "version": "6",
+      "when": 1792461024517,
+      "tag": "0010_live_checkins",
+      "breakpoints": true
     }
   ]
 }

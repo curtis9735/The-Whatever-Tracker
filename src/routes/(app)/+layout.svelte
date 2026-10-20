@@ -3,13 +3,25 @@
 	import Icon from '$lib/components/Icon.svelte';
 	import SearchOverlay from '$lib/components/SearchOverlay.svelte';
 	import { categoryColor } from '$lib/kinds';
+	import WatchCard from '$lib/components/WatchCard.svelte';
 	import { searchUi } from '$lib/search-ui.svelte';
+	import { watchClock } from '$lib/watching-ui.svelte';
 
 	let { data, children } = $props();
 
 	const path = $derived(page.url.pathname);
 	const isActive = (href: string) =>
 		href === '/' ? path === '/' : path === href || path.startsWith(`${href}/`);
+
+	// Watching now: the countdowns' clock, and the bar on every page except /watching and the item's
+	// own page (which has its own card)
+	watchClock(() => data.watching);
+	const watchedItemId = $derived(data.watching.live?.itemId ?? data.watching.finished?.itemId);
+	const showBar = $derived(
+		watchedItemId !== undefined && path !== '/watching' && path !== `/items/${watchedItemId}`
+	);
+	/** The phone bar's height (0 on desktop, where it's hidden): sticky Save rows sit above it (--watch-bar) */
+	let barHeight = $state(0);
 
 	function onKey(e: KeyboardEvent) {
 		const target = e.target as HTMLElement;
@@ -23,7 +35,7 @@
 
 <svelte:window onkeydown={onKey} />
 
-<div class="min-h-dvh md:pl-64">
+<div class="min-h-dvh md:pl-64" style="--watch-bar: {showBar ? barHeight : 0}px">
 	<!-- Desktop sidebar -->
 	<aside class="fixed inset-y-0 left-0 z-20 hidden w-64 flex-col border-r border-border bg-surface md:flex">
 		<a href="/" class="flex items-center gap-2 px-5 py-5 text-lg font-semibold tracking-tight">
@@ -71,6 +83,16 @@
 			</a>
 		</nav>
 		<div class="border-t border-border p-3">
+			{#if showBar}
+				<div class="mb-2">
+					<WatchCard
+						live={data.watching.live}
+						finished={data.watching.finished}
+						serverNow={data.watching.now}
+						variant="bar"
+					/>
+				</div>
+			{/if}
 			{#if data.user.isAdmin}
 				<a href="/admin/users" class="nav-link" class:nav-active={isActive('/admin')}>
 					<Icon name="shield" size={18} /> Household
@@ -103,9 +125,28 @@
 		</div>
 	</header>
 
-	<main class="mx-auto max-w-6xl px-4 pt-4 pb-28 md:px-8 md:pt-6 md:pb-12">
+	<!-- Phones: more room at the bottom while the now-watching bar shows, so nothing hides behind it -->
+	<main class="mx-auto max-w-6xl px-4 pt-4 md:px-8 md:pt-6 md:pb-12 {showBar ? 'pb-48' : 'pb-28'}">
 		{@render children()}
 	</main>
+
+	<!-- Phones: the now-watching bar, just above the bottom navigation -->
+	{#if showBar}
+		<div
+			class="fixed inset-x-0 z-20 px-2 pb-2 md:hidden"
+			style="bottom: calc(4rem + 1px + env(safe-area-inset-bottom))"
+			bind:offsetHeight={barHeight}
+		>
+			<div class="mx-auto max-w-md">
+				<WatchCard
+					live={data.watching.live}
+					finished={data.watching.finished}
+					serverNow={data.watching.now}
+					variant="bar"
+				/>
+			</div>
+		</div>
+	{/if}
 
 	<!-- Mobile bottom navigation -->
 	<nav

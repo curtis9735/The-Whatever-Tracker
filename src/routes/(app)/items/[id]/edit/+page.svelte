@@ -75,7 +75,7 @@
 					allowNoStatus={!data.item.status}
 				/>
 			{/key}
-			<div class="sticky bottom-20 flex gap-3 md:bottom-4">
+			<div class="sticky bottom-[calc(5rem+var(--watch-bar,0px))] flex gap-3 md:bottom-4">
 				<button class="btn btn-primary flex-1 shadow-lg sm:flex-none" disabled={busy}
 					>{busy ? 'Saving…' : 'Save changes'}</button
 				>

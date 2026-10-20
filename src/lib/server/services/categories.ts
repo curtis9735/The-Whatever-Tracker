@@ -69,7 +69,8 @@ export function editableCategories(userId: number) {
 	return listCategories(userId).filter((c) => c.access !== 'view');
 }
 
-const sharedSlug = (slug: string, owner: string) => `${slug}@${owner}`;
+/** A list shared with the viewer, as they reach it: `slug@owner` */
+export const sharedSlug = (slug: string, owner: string) => `${slug}@${owner}`;
 
 export function toFieldDef(f: FieldDefinition): FieldDef {
 	return {

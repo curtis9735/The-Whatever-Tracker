@@ -313,6 +313,69 @@ export const releases = sqliteTable(
 	]
 );
 
+/**
+ * "Watching now": a live check-in for a movie or an episode. It runs for the movie's or episode's
+ * length, then the movie or episode is marked watched on its own. Each person has at most one live
+ * (ended_at IS NULL); ended rows stay a while for the "Watched" card and its Undo.
+ */
+export const checkins = sqliteTable(
+	'checkins',
+	{
+		id: integer('id').primaryKey({ autoIncrement: true }),
+		userId: integer('user_id')
+			.notNull()
+			.references(() => users.id, { onDelete: 'cascade' }),
+		itemId: integer('item_id')
+			.notNull()
+			.references(() => items.id, { onDelete: 'cascade' }),
+		/** Episodes only (null for a movie) */
+		season: integer('season'),
+		episode: integer('episode'),
+		/** The episode's name at check-in, so finishing never needs TMDB */
+		episodeTitle: text('episode_title'),
+		/** All times below are ms since the epoch */
+		checkedInAt: integer('checked_in_at').notNull(),
+		/** YYYY-MM-DD: the check-in day, the date of the log it adds */
+		date: text('date').notNull(),
+		durationMs: integer('duration_ms').notNull(),
+		/** The length came from TMDB (false: a usual length was assumed) */
+		runtimeKnown: integer('runtime_known', { mode: 'boolean' }).notNull().default(false),
+		/** When it finishes on its own; resuming after a pause moves it later */
+		endsAt: integer('ends_at').notNull(),
+		pausedAt: integer('paused_at'),
+		/** The status at check-in, and the "active" status the check-in set (null: it didn't change it) */
+		statusBefore: text('status_before'),
+		statusSet: text('status_set'),
+		/** Once it ends: null while live */
+		endedAt: integer('ended_at'),
+		/** 'finishing' while the play or log is being written, then 'auto' or 'early' */
+		outcome: text('outcome').$type<'finishing' | 'auto' | 'early' | 'cancelled' | 'undone'>(),
+		logId: integer('log_id').references(() => itemLogs.id, { onDelete: 'set null' }),
+		/** episode_watches.id of the play it added (no foreign key: Undo or a delete may remove it) */
+		watchId: integer('watch_id'),
+		/** The status finishing changed it to, or null when finishing left it alone */
+		statusAfter: text('status_after'),
+		/** For Undo: the status right after finishing, and the one Undo puts back while it's still that */
+		statusFinal: text('status_final'),
+		undoStatus: text('undo_status'),
+		/** The "Watched" card was closed */
+		dismissed: integer('dismissed', { mode: 'boolean' }).notNull().default(false),
+		createdAt: createdAt()
+	},
+	(t) => [
+		// One live check-in per person
+		uniqueIndex('checkins_live_user_idx')
+			.on(t.userId)
+			.where(sql`ended_at IS NULL`),
+		// The scheduler's look-up of check-ins whose time is up
+		index('checkins_live_ends_idx')
+			.on(t.endsAt)
+			.where(sql`ended_at IS NULL`),
+		index('checkins_item_idx').on(t.itemId),
+		index('checkins_user_ended_idx').on(t.userId, t.endedAt)
+	]
+);
+
 /** App-wide settings edited in the UI (e.g. API keys). Values here override the stack's env vars. */
 export const appSettings = sqliteTable('app_settings', {
 	key: text('key').primaryKey(),
@@ -338,3 +401,4 @@ export type Image = typeof images.$inferSelect;
 export type EpisodeWatch = typeof episodeWatches.$inferSelect;
 export type ListShare = typeof listShares.$inferSelect;
 export type ItemProgress = typeof itemProgress.$inferSelect;
+export type Checkin = typeof checkins.$inferSelect;

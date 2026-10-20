@@ -17,6 +17,9 @@
 	import EpisodeSelect from '$lib/components/EpisodeSelect.svelte';
 	import EpisodeTracker from '$lib/components/EpisodeTracker.svelte';
 	import HouseholdProgress from '$lib/components/HouseholdProgress.svelte';
+	import CheckInButton from '$lib/components/CheckInButton.svelte';
+	import WatchCard from '$lib/components/WatchCard.svelte';
+	import { runtimeFromFacts, watchKindOf } from '$lib/watching';
 
 	let { data, form } = $props();
 
@@ -52,6 +55,10 @@
 			return v !== undefined && v !== null && v !== '' && !(Array.isArray(v) && !v.length);
 		})
 	);
+	// Movies: "Check in" (Watching now), or the viewer's check-in for it. Shows have theirs in the episode tracker.
+	const isMovie = $derived(watchKindOf(item) === 'movie');
+	const liveHere = $derived(data.watching.live?.itemId === item.id ? data.watching.live : null);
+	const finishedHere = $derived(data.watching.finished?.itemId === item.id ? data.watching.finished : null);
 	const avgLogRating = $derived.by(() => {
 		const r = data.logs.map((l) => l.rating).filter((x): x is number => x !== null);
 		return r.length ? Math.round(r.reduce((a, b) => a + b, 0) / r.length) : null;
@@ -237,7 +244,20 @@
 				<span class="text-xs text-muted">avg of logs: <Rating value={avgLogRating} /></span>
 			{/if}
 			<span class="text-sm text-muted">{data.logs.length} {data.logs.length === 1 ? 'log' : 'logs'}</span>
+			{#if isMovie && !liveHere}
+				<CheckInButton
+					itemId={item.id}
+					minutes={runtimeFromFacts(meta?.facts)}
+					cls="btn btn-primary btn-sm"
+				/>
+			{/if}
 		</div>
+
+		{#if isMovie && (liveHere || finishedHere)}
+			<div class="mt-4">
+				<WatchCard live={liveHere} finished={finishedHere} serverNow={data.watching.now} />
+			</div>
+		{/if}
 
 		{#if editingRating}
 			<form
@@ -264,6 +284,7 @@
 					today={data.today}
 					{statusGroup}
 					version={episodesVersion}
+					watching={data.watching}
 					onchanged={() => episodesVersion++}
 					onlog={(season, episode) => openLog({ season, episode })}
 				/>
@@ -485,6 +506,7 @@
 				statuses={cat.statuses}
 				logFields={data.logFields}
 				tracked={data.tracked}
+				serverNow={data.watching.now}
 			/>
 		{/if}
 

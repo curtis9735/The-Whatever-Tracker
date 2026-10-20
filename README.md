@@ -202,9 +202,9 @@ list has **TV shows** ticked.
     some** (then pick the last season and episode you watched, by name), or **Caught up**. Everything up to that
     point is marked watched. Choosing progress moves a Planning show to Watching, and choosing Completed picks
     **Caught up** for you.
-  - **On the show's page:** a progress bar ("44 of 186 watched") and the **Next episode** with a one-tap
-    **Check in**, which logs it for today. After a check-in you get **Rate it** and **Undo**. **Other date, rating
-    or notes** opens the full log form for that episode.
+  - **On the show's page:** a progress bar ("44 of 186 watched") and the **Next episode** with **Check in**
+    (starts watching it now, see below) and **Mark watched**, which logs it for today right away. After either
+    you get **Rate it** and **Undo**. **Other date, rating or notes** opens the full log form for that episode.
   - **Seasons:** each season opens to its episodes, each with a check mark. Tap one to check it in **Today**,
     **When it aired**, on **Another date**, or **Don't remember** (marked watched, with no log). Tap a watched
     episode to see each time you watched it, remove one, or **Watch again**. **Mark season watched** does a whole
@@ -222,6 +222,15 @@ list has **TV shows** ticked.
     the first time you open them. A Yamtrack import marks each episode watched on the day you watched it.
   - **If TMDB can't be reached**, the page still loads and shows what you've watched, using TMDB's last answer
     when there is one.
+- **Watching now:** **Check in** on a movie or a show's next episode (linked to TMDB) starts a live check-in.
+  - **While it runs:** the item becomes Watching and a timer runs for the movie's or episode's length from TMDB
+    (about 2 h or 45 min when TMDB doesn't say). A bar above the bottom tabs (in the sidebar on a computer) shows
+    the time left. Tap it for the full view with **Pause / Resume**, **Mark watched now** and **Cancel check-in**.
+  - **When the time is up:** the movie is marked Completed, or the episode watched, on its own, with a log for the
+    day you checked in, even if the app is closed. You then get **Rate it** and **Undo**.
+  - **Good to know:** one check-in at a time; starting another asks whether to mark the running one watched or
+    cancel it. Cancelling puts the status back. On a shared list, others see "Watching now · S2 E5 · 20 min left"
+    on the item's Household card.
 - **Logs:** each log has a date, a rating for that time, a place, a price, notes, photos and the list's log
   fields. Logging something that was in a "planned" status (wishlist, to watch) moves it to the first "done"
   status automatically.

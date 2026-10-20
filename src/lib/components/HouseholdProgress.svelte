@@ -2,6 +2,8 @@
 	import { episodeCode, logEpisodeLabel, type LogEpisodes } from '$lib/episodes';
 	import { formatFieldValue } from '$lib/fields';
 	import type { FieldDef, StatusDef } from '$lib/types';
+	import { formatLength, timeLeft } from '$lib/watching';
+	import { clockNow, keepTicking } from '$lib/watching-ui.svelte';
 	import Icon from './Icon.svelte';
 	import Rating from './Rating.svelte';
 
@@ -26,20 +28,47 @@
 		logCount: number;
 		episodesWatched: number;
 		furthest: { season: number; episode: number } | null;
+		/** Their live check-in on it, if one is running or paused */
+		watching: {
+			season: number | null;
+			episode: number | null;
+			episodeTitle: string | null;
+			endsAt: number;
+			pausedAt: number | null;
+			durationMs: number;
+		} | null;
 	}
 
 	let {
 		people,
 		statuses,
 		logFields,
-		tracked = false
+		tracked = false,
+		serverNow
 	}: {
 		people: Person[];
 		statuses: StatusDef[];
 		logFields: FieldDef[];
 		/** A show linked to TMDB: say how far each person has got */
 		tracked?: boolean;
+		/** The server's time when the page was loaded (for "20 min left") */
+		serverNow: number;
 	} = $props();
+
+	const now = $derived(clockNow(serverNow));
+	/** Paused, or with time left: once their time is up it's being marked watched, so it isn't "now" */
+	const stillWatching = (w: Person['watching']) => !!w && (w.pausedAt !== null || w.endsAt > now);
+	// Someone watching it right now: their countdown ticks along, until it runs out
+	keepTicking(() =>
+		people.some((p) => p.watching && p.watching.pausedAt === null && p.watching.endsAt > now)
+	);
+
+	/** "Watching now · S2 E5 · 20 min left", or "… · Paused" */
+	function watchingNow(w: NonNullable<Person['watching']>) {
+		const code = w.season !== null && w.episode !== null ? episodeCode(w.season, w.episode) : null;
+		const when = w.pausedAt !== null ? 'Paused' : `${formatLength(timeLeft(w, now))} left`;
+		return ['Watching now', code, when].filter(Boolean).join(' · ');
+	}
 
 	const statusLabel = (key: string | null) =>
 		key ? (statuses.find((s) => s.key === key)?.label ?? key) : null;
@@ -75,6 +104,12 @@
 						<span class="text-xs text-muted">{`Last logged ${pretty(p.lastLoggedAt)}`}</span>
 					{/if}
 				</div>
+				{#if p.watching && stillWatching(p.watching)}
+					<p class="mt-1 flex items-center gap-1 text-sm font-medium text-accent tabular-nums">
+						<Icon name={p.watching.pausedAt === null ? 'play' : 'pause'} size={14} class="shrink-0" />
+						{watchingNow(p.watching)}
+					</p>
+				{/if}
 				{#if tracked && p.episodesWatched > 0}
 					<p class="mt-1 flex items-center gap-1 text-sm text-muted">
 						<Icon name="check" size={14} class="shrink-0 text-accent" />

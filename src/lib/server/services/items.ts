@@ -475,10 +475,28 @@ export interface HouseholdProgress {
 	/** Shows linked to TMDB: how many episodes they've watched, and the furthest one */
 	episodesWatched: number;
 	furthest: { season: number; episode: number } | null;
+	/** Their live check-in on it ("Watching now"), if they have one running or paused */
+	watching: HouseholdWatching | null;
 }
 
-/** Everyone else who has the item's list (its owner, and who it's shared with) and has tracked the item */
-export function householdProgress(viewerId: number, item: Pick<Item, 'id' | 'userId' | 'categoryId'>) {
+export interface HouseholdWatching {
+	season: number | null;
+	episode: number | null;
+	episodeTitle: string | null;
+	endsAt: number;
+	pausedAt: number | null;
+	durationMs: number;
+}
+
+/**
+ * Everyone else who has the item's list (its owner, and who it's shared with) and has tracked the
+ * item, or is watching it right now
+ */
+export function householdProgress(
+	viewerId: number,
+	item: Pick<Item, 'id' | 'userId' | 'categoryId'>,
+	now = Date.now()
+) {
 	const sqlite = rawDb();
 	const people = sqlite
 		.prepare(
@@ -494,7 +512,7 @@ export function householdProgress(viewerId: number, item: Pick<Item, 'id' | 'use
 		)
 		.all({ owner: item.userId, item: item.id, viewer: viewerId, list: item.categoryId }) as (Omit<
 		HouseholdProgress,
-		'logs' | 'logCount' | 'episodesWatched' | 'furthest' | 'owner' | 'favorite'
+		'logs' | 'logCount' | 'episodesWatched' | 'furthest' | 'owner' | 'favorite' | 'watching'
 	> & { owner: number; favorite: number })[];
 	const logsOf = sqlite.prepare(
 		`SELECT l.id, l.date, l.rating, l.notes, l.location, l.custom, ${logEpisodesSql('l')} AS ep
@@ -505,6 +523,12 @@ export function householdProgress(viewerId: number, item: Pick<Item, 'id' | 'use
 		`SELECT COUNT(DISTINCT season * ${EPISODE_ORDER} + episode) AS n, MAX(season * ${EPISODE_ORDER} + episode) AS furthest
 		 FROM episode_watches WHERE item_id = ? AND user_id = ? AND season > 0`
 	);
+	// Live check-ins only: one whose time is up is about to be marked watched, so it isn't "now" any more
+	const live = sqlite.prepare(
+		`SELECT season, episode, episode_title AS episodeTitle, ends_at AS endsAt, paused_at AS pausedAt,
+			duration_ms AS durationMs
+		 FROM checkins WHERE item_id = ? AND user_id = ? AND ended_at IS NULL AND (paused_at IS NOT NULL OR ends_at > ?)`
+	);
 	const out: HouseholdProgress[] = [];
 	for (const p of people) {
 		const logs = (
@@ -514,7 +538,8 @@ export function householdProgress(viewerId: number, item: Pick<Item, 'id' | 'use
 			})[]
 		).map(({ custom, ep, ...l }) => ({ ...l, custom: parseJson(custom), episodes: parseLogEpisodes(ep) }));
 		const w = watched.get(item.id, p.userId) as { n: number; furthest: number | null };
-		const tracked = p.status || p.rating !== null || p.favorite || p.notes || logs.length || w.n;
+		const watching = (live.get(item.id, p.userId, now) as HouseholdWatching | undefined) ?? null;
+		const tracked = p.status || p.rating !== null || p.favorite || p.notes || logs.length || w.n || watching;
 		if (!tracked) continue;
 		out.push({
 			...p,
@@ -526,7 +551,8 @@ export function householdProgress(viewerId: number, item: Pick<Item, 'id' | 'use
 			furthest:
 				w.furthest === null
 					? null
-					: { season: Math.floor(w.furthest / EPISODE_ORDER), episode: w.furthest % EPISODE_ORDER }
+					: { season: Math.floor(w.furthest / EPISODE_ORDER), episode: w.furthest % EPISODE_ORDER },
+			watching
 		});
 	}
 	return out;

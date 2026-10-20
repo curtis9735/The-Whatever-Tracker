@@ -1,10 +1,14 @@
 <script lang="ts">
+	import { untrack } from 'svelte';
 	import { enhance } from '$app/forms';
 	import { invalidateAll } from '$app/navigation';
 	import type { SubmitFunction } from '@sveltejs/kit';
 	import { episodeCode, seasonLabel, type TrackerView } from '$lib/episodes';
+	import type { WatchingState } from '$lib/watching';
+	import CheckInButton from './CheckInButton.svelte';
 	import Icon from './Icon.svelte';
 	import TrackerSeason from './TrackerSeason.svelte';
+	import WatchCard from './WatchCard.svelte';
 
 	interface StatusChange {
 		key: string;
@@ -45,6 +49,7 @@
 		today,
 		statusGroup,
 		version,
+		watching,
 		onchanged,
 		onlog
 	}: {
@@ -55,6 +60,8 @@
 		/** The show's status group (planned, active, done, dropped) */
 		statusGroup: string | undefined;
 		version: number;
+		/** The viewer's live check-in (Watching now), shown here when it's for this show */
+		watching: WatchingState;
 		/** After any change: open seasons fetch their episodes again */
 		onchanged: () => void;
 		/** Opens the full log form for an episode */
@@ -64,6 +71,8 @@
 	let outcome = $state<Outcome | null>(null);
 	let problem = $state<string | null>(null);
 	let busy = $state(false);
+	/** A live check-in (Check in) is being saved: Mark watched waits for it, and the other way round */
+	let checkingIn = $state(false);
 	let open = $state<Record<number, boolean>>({});
 	let opened = false;
 
@@ -85,7 +94,7 @@
 
 	function submit(after?: () => void): SubmitFunction {
 		return ({ cancel }) => {
-			if (pending || Date.now() < quietUntil) {
+			if (pending || checkingIn || Date.now() < quietUntil) {
 				cancel();
 				return;
 			}
@@ -128,6 +137,23 @@
 		const was = outcome?.unwatched;
 		return !!u && !u.removed.length && !!was && was.season === u.season && was.episode === u.episode;
 	}
+
+	// Watching now: a live check-in for this show takes the next episode's place
+	const liveHere = $derived(watching.live?.itemId === itemId ? watching.live : null);
+	const finishedHere = $derived(watching.finished?.itemId === itemId ? watching.finished : null);
+	function watchChanged() {
+		outcome = null;
+		onchanged();
+	}
+	// A check-in here that ends or changes some other way (on its own, or on another device): the open
+	// seasons fetch their episodes again
+	let watchKey: string | null = null;
+	$effect(() => {
+		const key = `${liveHere?.id ?? ''}:${finishedHere?.id ?? ''}`;
+		const before = watchKey;
+		watchKey = key;
+		if (before !== null && before !== key) untrack(() => onchanged());
+	});
 
 	const plural = (n: number, word: string) => `${n} ${word}${n === 1 ? '' : 's'}`;
 
@@ -180,6 +206,13 @@
 	{#if status}
 		<input type="hidden" name="status_set" value={status.key} />
 		<input type="hidden" name="status_was" value={status.from ?? ''} />
+	{/if}
+{/snippet}
+
+<!-- The viewer's check-in for this show: running, paused, or just finished -->
+{#snippet watchCard()}
+	{#if liveHere || finishedHere}
+		<WatchCard live={liveHere} finished={finishedHere} serverNow={watching.now} onchanged={watchChanged} />
 	{/if}
 {/snippet}
 
@@ -253,6 +286,7 @@
 			<h2 class="section-title">Episodes</h2>
 			<p class="mt-2 text-sm text-muted">Loading episodes from TMDB…</p>
 			<div class="mt-3 h-2 animate-pulse rounded-full bg-surface-2"></div>
+			{#if liveHere || finishedHere}<div class="mt-4">{@render watchCard()}</div>{/if}
 		</div>
 	{:else if !tracker.ok}
 		<div class="p-4">
@@ -261,6 +295,7 @@
 				{tracker.error}, so the episode list isn't available right now. You've watched {tracker.watched}
 				episode{tracker.watched === 1 ? '' : 's'}. You can still add a log for an episode below.
 			</p>
+			{#if liveHere || finishedHere}<div class="mt-4">{@render watchCard()}</div>{/if}
 		</div>
 		{#if tracker.seasons.length}
 			<ul class="divide-y divide-border border-t border-border">
@@ -289,7 +324,11 @@
 				</div>
 			</div>
 
-			{#if t.next}
+			{#if finishedHere && !liveHere}{@render watchCard()}{/if}
+
+			{#if liveHere}
+				{@render watchCard()}
+			{:else if t.next}
 				<div class="flex flex-wrap items-center gap-3">
 					<div class="min-w-0 flex-1">
 						<p class="text-xs text-muted">
@@ -300,13 +339,22 @@
 						</p>
 						{#if t.next.airDate}<p class="text-xs text-muted">Aired {pretty(t.next.airDate)}</p>{/if}
 					</div>
+					<!-- Check in: live, for the episode's length; Mark watched: right away -->
+					<CheckInButton
+						{itemId}
+						pick={{ season: t.next.season, episode: t.next.episode }}
+						minutes={t.next.runtime}
+						disabled={busy}
+						onchanged={watchChanged}
+						onbusy={(b) => (checkingIn = b)}
+					/>
 					<form method="POST" action="?/checkIn" use:enhance={submit()}>
 						<input type="hidden" name="season" value={t.next.season} />
 						<input type="hidden" name="episode" value={t.next.episode} />
 						<input type="hidden" name="when" value="today" />
-						<button class="btn btn-primary" disabled={busy}>
+						<button class="btn" disabled={busy || checkingIn}>
 							<Icon name="check" size={16} />
-							{busy ? 'Saving…' : 'Check in'}
+							{busy ? 'Saving…' : 'Mark watched'}
 						</button>
 					</form>
 				</div>
