@@ -92,6 +92,13 @@
       "when": 1792785379603,
       "tag": "0012_lastfm_username",
       "breakpoints": true
+    },
+    {
+      "idx": 13,
+      "version": "6",
+      "when": 1792795192414,
+      "tag": "0013_journal_indexes",
+      "breakpoints": true
     }
   ]
 }

@@ -156,6 +156,10 @@ export const itemLogs = sqliteTable(
 	(t) => [
 		index('logs_item_idx').on(t.itemId),
 		index('logs_user_date_idx').on(t.userId, t.date),
+		// The journal reads days straight from these (covering, no log row needed): newest first across
+		// everything, and per source (imported listening days, hand-written logs)
+		index('logs_user_date_source_idx').on(t.userId, t.date, t.source, t.itemId),
+		index('logs_user_source_date_idx').on(t.userId, t.source, t.date, t.itemId),
 		// NULL sources never collide, so hand-written logs are unaffected
 		uniqueIndex('logs_source_key_idx').on(t.userId, t.source, t.sourceKey)
 	]

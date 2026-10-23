@@ -1,0 +1,2 @@
+CREATE INDEX `logs_user_date_source_idx` ON `item_logs` (`user_id`,`date`,`source`,`item_id`);--> statement-breakpoint
+CREATE INDEX `logs_user_source_date_idx` ON `item_logs` (`user_id`,`source`,`date`,`item_id`);

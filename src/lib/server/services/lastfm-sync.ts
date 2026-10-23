@@ -1217,6 +1217,9 @@ export async function lastfmTick(budgetMs = TICK_BUDGET_MS): Promise<void> {
 		while (Date.now() < deadline && !signal.aborted) {
 			const r = await runPage(id, signal, run);
 			if (r !== 'more') break;
+			// A page is one synchronous transaction (about 100 ms here, several times that on a slow NAS):
+			// let the requests that queued up meanwhile run before the next one starts
+			await new Promise<void>((resolve) => setImmediate(resolve));
 		}
 	}
 	// Once every backfill is idle, the slow details fill-in uses what is left of the budget
