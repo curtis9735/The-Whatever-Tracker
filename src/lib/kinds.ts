@@ -75,18 +75,18 @@ export const KINDS: KindInfo[] = [
 	{
 		key: 'lastfm:album',
 		provider: 'lastfm',
-		label: 'Albums',
+		label: 'Music',
 		icon: '💿',
-		gives: 'Cover art, genres, a short description, listeners and plays',
+		gives: 'Albums you listen to: cover art, genres, a short description, listeners and plays',
 		group: 'Albums',
 		order: 7
 	},
 	{
 		key: 'lastfm:artist',
 		provider: 'lastfm',
-		label: 'Music artists',
+		label: 'Concerts',
 		icon: '🎤',
-		gives: 'Photo, genres, a short bio, listeners and plays',
+		gives: 'Artists you see live: photo, genres, a short bio, listeners and plays',
 		group: 'Artists',
 		order: 8
 	}

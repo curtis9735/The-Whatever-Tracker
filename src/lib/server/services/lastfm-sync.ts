@@ -740,7 +740,7 @@ function pickableList(userId: number, categoryId: number) {
 
 /**
  * Checks the username (and that its history is public), then starts importing it. `categoryId`: the
- * list to put albums in, or 'new' for a fresh "Albums" list. Connecting again replaces the old account:
+ * list to put albums in, or 'new' for a fresh "Music" list. Connecting again replaces the old account:
  * the same history never doubles, as a play is identified by who, when and which track.
  */
 export async function connectLastfm(

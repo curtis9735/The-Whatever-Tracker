@@ -246,13 +246,13 @@ describe('access', () => {
 
 		const mine = listCategories(h.editor.id);
 		expect(mine.map((c) => [c.name, c.slug, c.access, c.ownerName, c.sharedWith])).toEqual([
-			['Albums', albums.slug, 'owner', null, 0],
+			['Music', albums.slug, 'owner', null, 0],
 			['Movies', movies.slug, 'owner', null, 0],
 			['Cheese', `cheese@${h.owner.username}`, 'view', 'Daniel', 1],
 			['Whiskey', `whiskey@${h.owner.username}`, 'edit', 'Daniel', 2]
 		]);
 		expect(mine.find((c) => c.name === 'Whiskey')?.itemCount).toBe(1);
-		expect(editableCategories(h.editor.id).map((c) => c.name)).toEqual(['Albums', 'Movies', 'Whiskey']);
+		expect(editableCategories(h.editor.id).map((c) => c.name)).toEqual(['Music', 'Movies', 'Whiskey']);
 		expect(listCategories(h.owner.id).map((c) => [c.name, c.access, c.sharedWith])).toEqual([
 			['Whiskey', 'owner', 2],
 			['Cheese', 'owner', 1]

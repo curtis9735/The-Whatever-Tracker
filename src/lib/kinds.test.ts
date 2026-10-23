@@ -10,8 +10,8 @@ describe('hidden MusicBrainz kinds', () => {
 	});
 
 	it('the last.fm cards read plainly', () => {
-		expect(KIND_BY_KEY.get('lastfm:album')?.label).toBe('Albums');
-		expect(KIND_BY_KEY.get('lastfm:artist')?.label).toBe('Music artists');
+		expect(KIND_BY_KEY.get('lastfm:album')?.label).toBe('Music');
+		expect(KIND_BY_KEY.get('lastfm:artist')?.label).toBe('Concerts');
 	});
 
 	it('saving keeps a hidden kind the list already had', () => {

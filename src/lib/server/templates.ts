@@ -115,7 +115,7 @@ export const TEMPLATES: CategoryTemplate[] = [
 	},
 	{
 		key: 'albums',
-		name: 'Albums',
+		name: 'Music',
 		icon: '💿',
 		color: 'teal',
 		description:

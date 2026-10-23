@@ -240,7 +240,7 @@ list has **TV shows** ticked.
   status automatically.
 - **Concerts:** the item is the artist, and each show you attend is a log. Once setlist.fm is connected
   (**Me → Integrations**), any list with **Concert setlists** ticked under **List settings → Fill in details
-  automatically → Extras** gets the lookup. That option appears once the list has **Music artists** ticked, and
+  automatically → Extras** gets the lookup. That option appears once the list has **Concerts** ticked, and
   the Concerts template has both. To search for artists in the search bar, also connect MusicBrainz, which only
   needs an email address or URL as contact info.
   - **When adding the artist** (from search or the Add form): choose **Seen** and the date of the show. The show
@@ -325,7 +325,7 @@ list has **TV shows** ticked.
     disconnects. Albums you already had stay.
   - **Albums you delete stay deleted:** a later play doesn't bring them back. **Settings → last.fm** shows how
     many there are, with a **Re-add them** button that restores them, with logs for every day you played them.
-  - **Albums from search:** a list with **Albums (last.fm)** ticked also searches last.fm for covers, genres and
+  - **Albums from search:** a list with **Music** ticked also searches last.fm for covers, genres and
     descriptions. Adding an album the list already has opens it.
 - **Spreadsheet import:** to bring in a table you already keep (a whiskey spreadsheet, say), open the list and
   tap the upload icon beside the settings gear (or **Me → Your data**, then pick the list). Select the cells in

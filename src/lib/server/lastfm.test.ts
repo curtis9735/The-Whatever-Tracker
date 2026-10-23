@@ -151,7 +151,7 @@ function person(name?: string) {
 	return user;
 }
 
-/** A person with an Albums list */
+/** A person with a Music list */
 function listener() {
 	const user = person();
 	const list = categories.createCategoryFromTemplate(user.id, 'albums');
@@ -805,7 +805,7 @@ describe('shared lists', () => {
 		expect(await drain(s.importer.id)).toBe('done');
 		const acct = account(s.importer.id)!;
 		expect(acct.errorCode).toBe('list');
-		expect(acct.errorMessage).toMatch(/can't add to 'Albums' any more/);
+		expect(acct.errorMessage).toMatch(/can't add to 'Music' any more/);
 		expect(count('SELECT COUNT(*) AS n FROM lastfm_scrobbles WHERE user_id = ?', s.importer.id)).toBe(450);
 		expect(itemCount(s.list.id)).toBe(before); // nothing new was created
 		expect(sync.getLastfmAccount(s.importer.id)!.error).toMatchObject({ code: 'list' });
@@ -821,7 +821,7 @@ describe('shared lists', () => {
 		expect(logsOf(s.importer.id).length).toBeGreaterThan(5);
 		expect(sync.getLastfmAccount(s.importer.id)).toMatchObject({
 			categoryId: own.id,
-			categoryName: 'Albums'
+			categoryName: 'Music'
 		});
 	});
 });
@@ -1183,12 +1183,12 @@ describe('connecting', () => {
 			username: 'CamelCase',
 			state: 'importing',
 			backfilled: false,
-			categoryName: 'Albums'
+			categoryName: 'Music'
 		});
 		expect(account(w.user.id)).toMatchObject({ job: 'backfill', jobFrom: 0, jobEnd: nowS(), jobTo: nowS() });
 	});
 
-	it('creates an Albums list on request, and adds last.fm to an owned list', async () => {
+	it('creates a Music list on request, and adds last.fm to an owned list', async () => {
 		const user = person();
 		const stuff = categories.createCategory(user.id, {
 			name: 'Music',
@@ -1203,7 +1203,7 @@ describe('connecting', () => {
 		server.plays.set('newlist', history(4, 2));
 		const view = await sync.connectLastfm(user.id, { username: 'newlist', categoryId: 'new' });
 		const created = categories.listCategories(user.id).find((c) => c.id === view.categoryId)!;
-		expect(created).toMatchObject({ name: 'Albums' });
+		expect(created).toMatchObject({ name: 'Music' });
 		expect(created.providerKinds).toContain('lastfm:album');
 		expect(created.id).not.toBe(stuff.id);
 

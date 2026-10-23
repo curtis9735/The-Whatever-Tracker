@@ -189,7 +189,7 @@
 						{#each data.lists as l (l.id)}
 							<option value={String(l.id)}>{l.icon} {l.name}{l.own ? '' : ` · ${l.ownerName}'s list`}</option>
 						{/each}
-						<option value="new">+ Create an 'Albums' list</option>
+						<option value="new">+ Create a 'Music' list</option>
 					</select>
 					{#if connectWarning}<p class="mt-2 text-sm text-amber-700 dark:text-amber-300">
 							{connectWarning}
