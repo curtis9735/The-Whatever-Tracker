@@ -218,3 +218,43 @@ describe('journal with imported listening', () => {
 		expect(r.more).toBe(true);
 	});
 });
+
+describe('journal covers', () => {
+	it('shows a picture shared by several albums once (repeats used to stop the page drawing)', () => {
+		const twin = person('twin');
+		const albums = createCategoryFromTemplate(twin.user.id, 'albums');
+		// Two albums with the same artwork, and a third with its own, all played the same day
+		for (const [title, url] of [
+			['Twin A', 'https://img.example/shared.png'],
+			['Twin B', 'https://img.example/shared.png'],
+			['Solo', 'https://img.example/solo.png']
+		]) {
+			const item = createItem(twin.user.id, { categoryId: albums.id, title });
+			const img = rawDb()
+				.prepare(
+					`INSERT INTO images (user_id, item_id, kind, source_url, sort_order, created_at)
+					 VALUES (?, ?, 'url_link', ?, 0, 1) RETURNING id`
+				)
+				.get(twin.user.id, item.id, url) as { id: number };
+			rawDb().prepare('UPDATE items SET cover_image_id = ? WHERE id = ?').run(img.id, item.id);
+			rawDb()
+				.prepare(
+					`INSERT INTO item_logs (item_id, user_id, date, custom, external, source, source_key, created_at)
+					 VALUES (?, ?, '2026-10-12', '{}', '{"lastfm":{"plays":3}}', 'lastfm', ?, 1)`
+				)
+				.run(item.id, twin.user.id, `${item.id}:2026-10-12`);
+		}
+		const r = journal(
+			twin.user.id,
+			resolveRange({ range: 'last-30-days' }, TODAY),
+			TODAY,
+			null,
+			100,
+			'group'
+		);
+		const day = r.entries.find((e) => e.kind === 'listening') as { albums: number; covers: string[] };
+		expect(day.albums).toBe(3);
+		expect(day.covers).toHaveLength(2);
+		expect(new Set(day.covers).size).toBe(day.covers.length);
+	});
+});

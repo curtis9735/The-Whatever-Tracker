@@ -194,7 +194,7 @@
 								class="card flex items-center gap-3 p-3 hover:bg-surface-2 sm:col-span-2 lg:col-span-3"
 							>
 								<div class="flex shrink-0 -space-x-3">
-									{#each e.covers as src (src)}
+									{#each e.covers as src, i (i)}
 										<img
 											{src}
 											alt=""

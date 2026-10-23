@@ -340,7 +340,8 @@ function listeningDays(userId: number, range: DateRange, lists: string, limit: n
 			thumbPath: r.img_thumb,
 			sourceUrl: r.img_source
 		});
-		if (src) list.push(src);
+		// Albums can share artwork (or last.fm's stand-in picture): show each picture once
+		if (src && !list.includes(src)) list.push(src);
 		covers.set(r.date, list);
 	}
 	return days.map((d) => ({
