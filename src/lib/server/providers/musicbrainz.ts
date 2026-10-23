@@ -129,6 +129,7 @@ export function normalizeMbArtistDetails(a: MbArtist, image?: string | null): No
 export function normalizeMbReleaseGroupDetails(rg: MbReleaseGroup): NormalizedMetadata {
 	return {
 		...normalizeMbReleaseGroup(rg),
+		artist: credit(rg),
 		largeImageUrl: coverArt(rg.id, 500),
 		genres: topGenres(rg.genres, rg.tags),
 		facts: [

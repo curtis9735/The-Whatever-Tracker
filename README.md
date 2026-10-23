@@ -5,7 +5,7 @@ sauces, the cats you've met… You define the lists and their fields. Built to r
 reverse proxy, and to work well on a phone.
 
 - **One search bar for everything.** Type once and see matches from your own lists _and_ every connected source
-  (TMDB, IGDB, BoardGameGeek, MusicBrainz) at the same time. There's no "pick a media type first" step.
+  (TMDB, IGDB, BoardGameGeek, MusicBrainz, last.fm) at the same time. There's no "pick a media type first" step.
 - **Any list you like.** Templates for common things, or build your own with custom fields (text, number, date,
   pick-one, pick-several, yes/no, link). Fields can describe the item (distillery, vintage) or each log (tasting
   notes, who won).
@@ -43,6 +43,9 @@ You'll see something like `uid=1026(you) gid=100(users)`. Those are `PUID=1026` 
 3. Under **Environment variables**, switch to **Advanced mode** and paste the variables from
    [`.env.example`](.env.example), filled in. At minimum you need `ORIGIN`, `PUID` and `PGID`.
    API keys can go here too, or you can add them later inside the app (see below).
+   Set `TZ` to your own time zone too (uncomment it in the variables; for example `America/Chicago`). The app splits days at the server's local
+   midnight, so `TZ` decides which day a log, and each imported last.fm play, lands on. Without `TZ` the server runs on UTC,
+   which can push an evening's listening onto tomorrow.
 4. Click **Deploy the stack**.
 5. Open the container's **Logs**. You'll see a box with a **setup code**. You'll need it in a minute.
 
@@ -148,15 +151,16 @@ NAS (so they're in its backups too). After saving, the app only ever shows the l
 **Or in the Portainer stack:** set the variables below and update the stack. Household members who aren't admins
 can see which sources are connected, but can't view or change keys.
 
-| Source            | Gives you                     | How to get access                                                                                                                      | Variables                                       |
-| ----------------- | ----------------------------- | -------------------------------------------------------------------------------------------------------------------------------------- | ----------------------------------------------- |
-| TMDB              | Movies, TV shows, air dates   | Free account → [API settings](https://www.themoviedb.org/settings/api)                                                                 | `TMDB_API_KEY` (v3 key or v4 read token)        |
-| IGDB              | Video games, release dates    | [Twitch developer console](https://dev.twitch.tv/console/apps) → register an app                                                       | `IGDB_CLIENT_ID`, `IGDB_CLIENT_SECRET`          |
-| BoardGameGeek     | Board games                   | [Register an application](https://boardgamegeek.com/applications), then create a token. Approval is manual and can take a week or more | `BGG_API_TOKEN`                                 |
-| MusicBrainz       | Artists, albums (+ cover art) | No key needed, just contact info                                                                                                       | `MUSICBRAINZ_CONTACT` (an email address or URL) |
-| setlist.fm        | Concert setlists              | Free [API key](https://www.setlist.fm/settings/api)                                                                                    | `SETLISTFM_API_KEY`                             |
-| Open Food Facts   | Barcode lookups               | Always on, no key                                                                                                                      | none                                            |
-| Wikimedia, Deezer | Artist photos                 | Always on, no key. Used when adding a MusicBrainz artist                                                                               | none                                            |
+| Source            | Gives you                     | How to get access                                                                                                                                    | Variables                                       |
+| ----------------- | ----------------------------- | ---------------------------------------------------------------------------------------------------------------------------------------------------- | ----------------------------------------------- |
+| TMDB              | Movies, TV shows, air dates   | Free account → [API settings](https://www.themoviedb.org/settings/api)                                                                               | `TMDB_API_KEY` (v3 key or v4 read token)        |
+| IGDB              | Video games, release dates    | [Twitch developer console](https://dev.twitch.tv/console/apps) → register an app                                                                     | `IGDB_CLIENT_ID`, `IGDB_CLIENT_SECRET`          |
+| BoardGameGeek     | Board games                   | [Register an application](https://boardgamegeek.com/applications), then create a token. Approval is manual and can take a week or more               | `BGG_API_TOKEN`                                 |
+| MusicBrainz       | Artists, albums (+ cover art) | No key needed, just contact info                                                                                                                     | `MUSICBRAINZ_CONTACT` (an email address or URL) |
+| setlist.fm        | Concert setlists              | Free [API key](https://www.setlist.fm/settings/api)                                                                                                  | `SETLISTFM_API_KEY`                             |
+| last.fm           | Albums, listening history     | Free account → [create an API account](https://www.last.fm/api/account/create) (any name and description, no callback URL). Only the API key is used | `LASTFM_API_KEY`                                |
+| Open Food Facts   | Barcode lookups               | Always on, no key                                                                                                                                    | none                                            |
+| Wikimedia, Deezer | Artist photos                 | Always on, no key. Used when adding a MusicBrainz artist                                                                                             | none                                            |
 
 Each list says what it holds under **List settings → Fill in details automatically** (Movies, TV shows, Music
 artists…). The search bar only asks sources that one of your lists uses. For example, TV results appear only if a
@@ -283,6 +287,46 @@ list has **TV shows** ticked.
 - **Up next** on the home page shows items in a planned status (Wishlist, Want to see…). To keep a long wish
   list off the home page, untick **Show in Up next on the home page** in that list's settings. Its items stay
   in the list, and favorites from it still appear under Favorites.
+- **last.fm:** bring in everything you've listened to. Each album becomes an item, and each day you played it a
+  log in your Journal.
+  - **Getting a key (admins):** create an API account at [last.fm/api/account/create](https://www.last.fm/api/account/create)
+    (any name and description, no callback URL), copy the API key (the shared secret isn't used), and paste it
+    under **Me → Integrations → last.fm**, or set `LASTFM_API_KEY` in the stack. Until then **Settings → Your
+    last.fm** says an admin needs to add one.
+  - **Connecting:** open **Settings → Your last.fm**, enter your last.fm username and pick the list to put albums
+    in. Your profile's listening history has to be public (on last.fm: **Settings → Privacy**, untick **Hide
+    recent listening**). Everyone in the household connects their own username, and only you ever see yours.
+  - **What's imported:** every album you've ever played, newest plays first, in the background. You can leave
+    the page, and the progress bar picks up where it was after a restart.
+    - **Albums:** each becomes an item in the chosen list, unless the list already has it (from MusicBrainz or
+      typed by hand), in which case that item is used. Its cover is linked, not downloaded. It moves to the list's
+      first "done" status (Listened) if it had none or was only planned. A status like Owned is left alone.
+    - **Editions stay separate:** "OK Computer (Deluxe Edition)" and "OK Computer" are two albums, since last.fm
+      keeps their plays apart too.
+    - **Logs:** one per album per listening day ("11 tracks"), on the day in the server's time zone (see `TZ`
+      above). The item shows "Your plays: 143 · last played Mon, Oct 20", and on a shared list the Household card
+      shows each person's plays.
+    - **Skipped:** plays with no album, and the track playing right now.
+    - **Details:** once the import is done, genres, a short description and facts for each album fill in slowly in
+      the background (about one album every 2 seconds).
+  - **Sync now / hourly:** after the import, new plays are read every hour (or once a day if you prefer). **Sync
+    now** does it at once, but not while one is running and at most once a minute. Each sync looks back two days
+    and, once a day, two weeks, so plays your phone submits late still land on the right day without doubling
+    anything.
+  - **Most played:** a list of albums can be sorted by **Most played** (your own plays).
+  - **The Journal:** by default each listening day is one row, "🎧 Listened to 7 albums · 84 tracks", with up to 4
+    covers, which opens that day's albums, and it counts as one entry in the stats, streak and heatmap. Pick
+    **Grouped by day**, **Every album** or **Hidden** under **Settings → last.fm**, or with the selector on the
+    Journal page (it appears once you have imported listening). Recent activity on the home page leaves
+    listening out.
+  - **Stop syncing:** forgets your username and keeps everything imported. Connecting again resumes without
+    duplicates. **Delete imported listening** removes the listening logs, gives back the statuses the import
+    changed, and removes albums the import added that you haven't rated, noted, tagged or logged yourself, then
+    disconnects. Albums you already had stay.
+  - **Albums you delete stay deleted:** a later play doesn't bring them back. **Settings → last.fm** shows how
+    many there are, with a **Re-add them** button that restores them, with logs for every day you played them.
+  - **Albums from search:** a list with **Albums (last.fm)** ticked also searches last.fm for covers, genres and
+    descriptions. Adding an album the list already has opens it.
 - **Spreadsheet import:** to bring in a table you already keep (a whiskey spreadsheet, say), open the list and
   tap the upload icon beside the settings gear (or **Me → Your data**, then pick the list). Select the cells in
   your spreadsheet **including the header row**, copy, and paste them in, or choose a CSV file. Only include the

@@ -16,6 +16,8 @@
 		favorite: boolean;
 		notes: string | null;
 		lastLoggedAt: string | null;
+		/** Their last.fm plays of it (0 when none) */
+		plays: number;
 		logs: {
 			id: number;
 			date: string;
@@ -24,6 +26,8 @@
 			location: string | null;
 			custom: Record<string, unknown>;
 			episodes: LogEpisodes | null;
+			/** An imported last.fm log */
+			external: { lastfm: { plays: number } } | null;
 		}[];
 		logCount: number;
 		episodesWatched: number;
@@ -103,6 +107,11 @@
 					{#if p.lastLoggedAt}
 						<span class="text-xs text-muted">{`Last logged ${pretty(p.lastLoggedAt)}`}</span>
 					{/if}
+					{#if p.plays}
+						<span class="text-xs text-muted"
+							>{`🎧 ${p.plays.toLocaleString()} ${p.plays === 1 ? 'play' : 'plays'}`}</span
+						>
+					{/if}
 				</div>
 				{#if p.watching && stillWatching(p.watching)}
 					<p class="mt-1 flex items-center gap-1 text-sm font-medium text-accent tabular-nums">
@@ -130,6 +139,11 @@
 									<div class="flex items-start gap-3">
 										<div class="min-w-0 flex-1">
 											<p class="font-medium">{pretty(log.date)}</p>
+											{#if log.external?.lastfm}
+												<p class="text-muted">
+													{`${log.external.lastfm.plays.toLocaleString()} ${log.external.lastfm.plays === 1 ? 'track' : 'tracks'} · last.fm`}
+												</p>
+											{/if}
 											{#if episode}
 												<p class="flex items-center gap-1">
 													<Icon name="check" size={14} class="shrink-0 text-accent" />

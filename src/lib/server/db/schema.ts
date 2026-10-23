@@ -147,9 +147,18 @@ export const itemLogs = sqliteTable(
 			.notNull()
 			.default(sql`'{}'`),
 		external: text('external', { mode: 'json' }).$type<Record<string, unknown>>(),
+		/** null = written by hand; 'lastfm' = imported listening */
+		source: text('source'),
+		/** For 'lastfm': `${lastfm_albums.id}:${YYYY-MM-DD}`, so re-running an import updates the same log */
+		sourceKey: text('source_key'),
 		createdAt: createdAt()
 	},
-	(t) => [index('logs_item_idx').on(t.itemId), index('logs_user_date_idx').on(t.userId, t.date)]
+	(t) => [
+		index('logs_item_idx').on(t.itemId),
+		index('logs_user_date_idx').on(t.userId, t.date),
+		// NULL sources never collide, so hand-written logs are unaffected
+		uniqueIndex('logs_source_key_idx').on(t.userId, t.source, t.sourceKey)
+	]
 );
 
 export const images = sqliteTable(
@@ -376,6 +385,101 @@ export const checkins = sqliteTable(
 	]
 );
 
+/** One person's last.fm connection: who they are on last.fm, where their albums go, and the sync's cursor */
+export const lastfmAccounts = sqliteTable('lastfm_accounts', {
+	userId: integer('user_id')
+		.primaryKey()
+		.references(() => users.id, { onDelete: 'cascade' }),
+	/** last.fm's own capitalization */
+	username: text('username').notNull(),
+	categoryId: integer('category_id').references(() => categories.id, { onDelete: 'set null' }),
+	syncEvery: text('sync_every').$type<'hourly' | 'daily'>().notNull().default('hourly'),
+	journalMode: text('journal_mode').$type<'group' | 'hide' | 'all'>().notNull().default('group'),
+	/** Every play at or before this (unix seconds) is imported */
+	syncedUntil: integer('synced_until').notNull().default(0),
+	/** The running window: plays from jobFrom (exclusive) up to jobEnd, newest first, jobTo is the cursor */
+	job: text('job').$type<'backfill' | 'sync'>(),
+	jobFrom: integer('job_from'),
+	jobTo: integer('job_to'),
+	jobEnd: integer('job_end'),
+	jobTotal: integer('job_total'),
+	jobDone: integer('job_done').notNull().default(0),
+	backfilledAt: integer('backfilled_at', { mode: 'timestamp_ms' }),
+	lastSyncAt: integer('last_sync_at', { mode: 'timestamp_ms' }),
+	/** ms since the epoch: when a sync last re-read the full two-week window for late-submitted plays */
+	deepSyncAt: integer('deep_sync_at').notNull().default(0),
+	/** ms since the epoch: when the next sync (or retry) is due */
+	nextSyncAt: integer('next_sync_at').notNull().default(0),
+	errorCode: text('error_code'),
+	errorMessage: text('error_message'),
+	errorCount: integer('error_count').notNull().default(0),
+	/** Cached totals */
+	plays: integer('plays').notNull().default(0),
+	albums: integer('albums').notNull().default(0),
+	/** The slow "fill in album details" pass finished */
+	enrichedAt: integer('enriched_at', { mode: 'timestamp_ms' }),
+	connectedAt: createdAt()
+});
+
+/** One row per person per album they've played */
+export const lastfmAlbums = sqliteTable(
+	'lastfm_albums',
+	{
+		id: integer('id').primaryKey({ autoIncrement: true }),
+		userId: integer('user_id')
+			.notNull()
+			.references(() => users.id, { onDelete: 'cascade' }),
+		/** albumKey(artist, title) */
+		key: text('key').notNull(),
+		artist: text('artist').notNull(),
+		title: text('title').notNull(),
+		/** The last.fm username the plays came from; lets a different name be refused after "Stop syncing" */
+		username: text('username'),
+		mbid: text('mbid'),
+		imageUrl: text('image_url'),
+		/** The item it became (or matched); NULL once that item is deleted */
+		itemId: integer('item_id').references(() => items.id, { onDelete: 'set null' }),
+		/** Ever linked: a deleted item isn't re-added */
+		linkedAt: integer('linked_at'),
+		/** The import created the item */
+		createdItem: integer('created_item', { mode: 'boolean' }).notNull().default(false),
+		/** The import moved the person's status to done */
+		promoted: integer('promoted', { mode: 'boolean' }).notNull().default(false),
+		statusBefore: text('status_before'),
+		plays: integer('plays').notNull().default(0),
+		firstUts: integer('first_uts'),
+		lastUts: integer('last_uts')
+	},
+	(t) => [
+		uniqueIndex('lastfm_albums_user_key_idx').on(t.userId, t.key),
+		index('lastfm_albums_user_mbid_idx').on(t.userId, t.mbid),
+		index('lastfm_albums_item_idx').on(t.itemId)
+	]
+);
+
+/** Every play. The key makes re-running a window harmless. */
+export const lastfmScrobbles = sqliteTable(
+	'lastfm_scrobbles',
+	{
+		userId: integer('user_id')
+			.notNull()
+			.references(() => users.id, { onDelete: 'cascade' }),
+		/** Unix seconds */
+		uts: integer('uts').notNull(),
+		/** foldName(artist)|foldName(track) */
+		trackKey: text('track_key').notNull(),
+		albumId: integer('album_id')
+			.notNull()
+			.references(() => lastfmAlbums.id, { onDelete: 'cascade' }),
+		/** YYYY-MM-DD in the server's time zone */
+		date: text('date').notNull()
+	},
+	(t) => [
+		primaryKey({ columns: [t.userId, t.uts, t.trackKey] }),
+		index('lastfm_scrobbles_album_date_idx').on(t.albumId, t.date)
+	]
+);
+
 /** App-wide settings edited in the UI (e.g. API keys). Values here override the stack's env vars. */
 export const appSettings = sqliteTable('app_settings', {
 	key: text('key').primaryKey(),
@@ -402,3 +506,5 @@ export type EpisodeWatch = typeof episodeWatches.$inferSelect;
 export type ListShare = typeof listShares.$inferSelect;
 export type ItemProgress = typeof itemProgress.$inferSelect;
 export type Checkin = typeof checkins.$inferSelect;
+export type LastfmAccount = typeof lastfmAccounts.$inferSelect;
+export type LastfmAlbum = typeof lastfmAlbums.$inferSelect;

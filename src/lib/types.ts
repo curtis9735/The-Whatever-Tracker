@@ -56,6 +56,8 @@ export interface NormalizedMetadata extends SearchResult {
 	facts: MetadataFact[];
 	/** Larger artwork than the search thumbnail, when the provider has it */
 	largeImageUrl?: string;
+	/** Who made it, for albums (kept in the item's metadata so albums can be matched by artist) */
+	artist?: string;
 }
 
 export interface LocalSearchHit {

@@ -8,7 +8,7 @@ vi.mock('$env/dynamic/private', async () => {
 	return { env: { DATA_DIR: dir, MIGRATIONS_DIR: path.resolve('drizzle') } };
 });
 
-const { db, schema } = await import('./db');
+const { db, rawDb, schema } = await import('./db');
 const { createCategoryFromTemplate, getCategoryById } = await import('./services/categories');
 const { addLog, createItem } = await import('./services/items');
 const { journal, logBounds } = await import('./services/journal');
@@ -109,5 +109,112 @@ describe('journal', () => {
 			100
 		);
 		expect(r.entries).toEqual([]);
+	});
+});
+
+describe('journal with imported listening', () => {
+	const fan = person('fan');
+	const albums = createCategoryFromTemplate(fan.user.id, 'albums');
+	const album = (title: string, cover = true) => {
+		const item = createItem(fan.user.id, { categoryId: albums.id, title });
+		if (cover) {
+			const img = rawDb()
+				.prepare(
+					`INSERT INTO images (user_id, item_id, kind, source_url, sort_order, created_at)
+					 VALUES (?, ?, 'url_link', ?, 0, 1) RETURNING id`
+				)
+				.get(fan.user.id, item.id, `https://img.example/${encodeURIComponent(title)}.png`) as { id: number };
+			rawDb().prepare('UPDATE items SET cover_image_id = ? WHERE id = ?').run(img.id, item.id);
+		}
+		return item;
+	};
+	/** A day of listening, as the importer writes it */
+	const listened = (title: string, date: string, plays: number, cover = true) => {
+		const item = album(title, cover);
+		rawDb()
+			.prepare(
+				`INSERT INTO item_logs (item_id, user_id, date, custom, external, source, source_key, created_at)
+				 VALUES (?, ?, ?, '{}', ?, 'lastfm', ?, 1)`
+			)
+			.run(item.id, fan.user.id, date, JSON.stringify({ lastfm: { plays } }), `${item.id}:${date}`);
+		return item;
+	};
+	fan.log(fan.whiskey.id, 'Ardbeg 10', '2026-10-12');
+	listened('Alpha', '2026-10-12', 7);
+	listened('Beta', '2026-10-12', 4);
+	listened('Gamma', '2026-10-13', 3);
+	for (const [i, name] of ['L1', 'L2', 'L3', 'L4', 'L5', 'L6'].entries()) {
+		listened(name, '2026-10-10', 10 - i, name !== 'L2');
+	}
+	const run = (mode: 'group' | 'hide' | 'all', list: number | null = null) =>
+		journal(fan.user.id, resolveRange({ range: 'last-30-days' }, TODAY), TODAY, list, 100, mode);
+
+	it('shows every album, with how many tracks each was played', () => {
+		const r = run('all');
+		expect(r.stats.total).toBe(10); // 9 albums and the whiskey
+		const alpha = r.entries.find((e) => e.kind === 'log' && e.title === 'Alpha');
+		expect(alpha).toMatchObject({ plays: 7, date: '2026-10-12' });
+		expect(r.entries.find((e) => e.kind === 'log' && e.title === 'Ardbeg 10')).toMatchObject({ plays: null });
+		expect(r.hasListening).toBe(true);
+	});
+
+	it('groups a listening day into one row, and counts it once in the stats and heatmap', () => {
+		const r = run('group');
+		expect(r.stats.total).toBe(4); // the whiskey and three listening days
+		expect(r.stats.activeDays).toBe(3);
+		expect(r.heat.weeks.flat().find((c) => c.date === '2026-10-12')!.count).toBe(2);
+		expect(r.heat.weeks.flat().find((c) => c.date === '2026-10-13')!.count).toBe(1);
+		expect(r.entries.map((e) => `${e.date} ${e.kind === 'log' ? e.title : 'listening'}`)).toEqual([
+			'2026-10-13 listening',
+			'2026-10-12 Ardbeg 10',
+			'2026-10-12 listening',
+			'2026-10-10 listening'
+		]);
+		expect(r.entries[0]).toMatchObject({ kind: 'listening', albums: 1, tracks: 3 });
+		expect(r.entries[2]).toMatchObject({ kind: 'listening', albums: 2, tracks: 11 });
+		expect(r.more).toBe(false);
+	});
+
+	it('shows up to four covers per day, most played first, skipping albums without one', () => {
+		const day = run('group').entries.find((e) => e.kind === 'listening' && e.date === '2026-10-10');
+		expect(day).toMatchObject({ albums: 6, tracks: 10 + 9 + 8 + 7 + 6 + 5 });
+		const covers = (day as { covers: string[] }).covers;
+		expect(covers).toHaveLength(4);
+		expect(covers[0]).toContain('L1');
+		expect(covers.join()).not.toContain('L2');
+	});
+
+	it('hides listening altogether', () => {
+		const r = run('hide');
+		expect(r.entries.map((e) => (e.kind === 'log' ? e.title : 'listening'))).toEqual(['Ardbeg 10']);
+		expect(r.stats.total).toBe(1);
+		expect(r.hasListening).toBe(true);
+	});
+
+	it('narrows a grouped day to one list', () => {
+		const r = run('group', fan.whiskey.id);
+		expect(r.entries.map((e) => e.kind)).toEqual(['log']);
+		const albumsOnly = run('group', albums.id);
+		expect(albumsOnly.entries.every((e) => e.kind === 'listening')).toBe(true);
+		expect(albumsOnly.stats.total).toBe(3);
+	});
+
+	it('leaves the choice out for people with no imported listening', () => {
+		expect(
+			journal(
+				person('plain').user.id,
+				resolveRange({ range: 'last-30-days' }, TODAY),
+				TODAY,
+				null,
+				100,
+				'group'
+			).hasListening
+		).toBe(false);
+	});
+
+	it('pages grouped days like any other entries', () => {
+		const r = journal(fan.user.id, resolveRange({ range: 'last-30-days' }, TODAY), TODAY, null, 2, 'group');
+		expect(r.entries).toHaveLength(2);
+		expect(r.more).toBe(true);
 	});
 });

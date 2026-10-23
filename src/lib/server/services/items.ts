@@ -443,9 +443,32 @@ export function getItemDetail(userId: number, itemId: number) {
 			images: logImages.filter((i) => i.logId === l.id),
 			episodes: episodes.get(l.id) ?? null
 		})),
+		listening: listeningOf(userId, itemId),
 		household: householdProgress(userId, item),
 		canDelete: canDeleteItem(userId, item)
 	};
+}
+
+/** The viewer's own last.fm plays of an item: how many, and the day of the latest (server-local YYYY-MM-DD) */
+export interface Listening {
+	plays: number;
+	lastPlayed: string | null;
+}
+
+function listeningOf(userId: number, itemId: number): Listening | null {
+	const r = rawDb()
+		.prepare(
+			`SELECT SUM(plays) AS plays, MAX(last_uts) AS lastUts FROM lastfm_albums WHERE user_id = ? AND item_id = ?`
+		)
+		.get(userId, itemId) as { plays: number | null; lastUts: number | null };
+	if (!r.plays) return null;
+	return { plays: r.plays, lastPlayed: r.lastUts ? localDay(r.lastUts * 1000) : null };
+}
+
+/** YYYY-MM-DD of a moment in the server's time zone (what todayIso() gives at that moment) */
+export function localDay(ms: number) {
+	const d = new Date(ms);
+	return `${d.getFullYear()}-${String(d.getMonth() + 1).padStart(2, '0')}-${String(d.getDate()).padStart(2, '0')}`;
 }
 
 export interface HouseholdLog {
@@ -456,6 +479,8 @@ export interface HouseholdLog {
 	location: string | null;
 	custom: Record<string, unknown>;
 	episodes: LogEpisodes | null;
+	/** An imported last.fm log: how many tracks it covers */
+	external: { lastfm: { plays: number } } | null;
 }
 
 /** Someone else's progress on an item of a shared list */
@@ -469,6 +494,8 @@ export interface HouseholdProgress {
 	favorite: boolean;
 	notes: string | null;
 	lastLoggedAt: string | null;
+	/** Their last.fm plays of it (0 when they haven't imported any) */
+	plays: number;
 	/** Their latest logs, newest first (at most 50) */
 	logs: HouseholdLog[];
 	logCount: number;
@@ -512,13 +539,17 @@ export function householdProgress(
 		)
 		.all({ owner: item.userId, item: item.id, viewer: viewerId, list: item.categoryId }) as (Omit<
 		HouseholdProgress,
-		'logs' | 'logCount' | 'episodesWatched' | 'furthest' | 'owner' | 'favorite' | 'watching'
+		'logs' | 'logCount' | 'episodesWatched' | 'furthest' | 'owner' | 'favorite' | 'watching' | 'plays'
 	> & { owner: number; favorite: number })[];
 	const logsOf = sqlite.prepare(
-		`SELECT l.id, l.date, l.rating, l.notes, l.location, l.custom, ${logEpisodesSql('l')} AS ep
+		`SELECT l.id, l.date, l.rating, l.notes, l.location, l.custom, ${logEpisodesSql('l')} AS ep,
+			json_extract(l.external, '$.lastfm.plays') AS fmPlays
 		 FROM item_logs l WHERE l.item_id = ? AND l.user_id = ? ORDER BY l.date DESC, l.id DESC LIMIT 50`
 	);
 	const logCount = sqlite.prepare('SELECT COUNT(*) AS n FROM item_logs WHERE item_id = ? AND user_id = ?');
+	const playsOf = sqlite.prepare(
+		'SELECT COALESCE(SUM(plays), 0) AS n FROM lastfm_albums WHERE item_id = ? AND user_id = ?'
+	);
 	const watched = sqlite.prepare(
 		`SELECT COUNT(DISTINCT season * ${EPISODE_ORDER} + episode) AS n, MAX(season * ${EPISODE_ORDER} + episode) AS furthest
 		 FROM episode_watches WHERE item_id = ? AND user_id = ? AND season > 0`
@@ -532,19 +563,27 @@ export function householdProgress(
 	const out: HouseholdProgress[] = [];
 	for (const p of people) {
 		const logs = (
-			logsOf.all(item.id, p.userId) as (Omit<HouseholdLog, 'custom' | 'episodes'> & {
+			logsOf.all(item.id, p.userId) as (Omit<HouseholdLog, 'custom' | 'episodes' | 'external'> & {
 				custom: string;
 				ep: string;
+				fmPlays: number | null;
 			})[]
-		).map(({ custom, ep, ...l }) => ({ ...l, custom: parseJson(custom), episodes: parseLogEpisodes(ep) }));
+		).map(({ custom, ep, fmPlays, ...l }) => ({
+			...l,
+			custom: parseJson(custom),
+			episodes: parseLogEpisodes(ep),
+			external: fmPlays ? { lastfm: { plays: fmPlays } } : null
+		}));
 		const w = watched.get(item.id, p.userId) as { n: number; furthest: number | null };
 		const watching = (live.get(item.id, p.userId, now) as HouseholdWatching | undefined) ?? null;
+		const plays = (playsOf.get(item.id, p.userId) as { n: number }).n;
 		const tracked = p.status || p.rating !== null || p.favorite || p.notes || logs.length || w.n || watching;
 		if (!tracked) continue;
 		out.push({
 			...p,
 			owner: !!p.owner,
 			favorite: !!p.favorite,
+			plays,
 			logs,
 			logCount: (logCount.get(item.id, p.userId) as { n: number }).n,
 			episodesWatched: w.n,
@@ -837,7 +876,7 @@ export interface ListFilters {
 	favorite?: boolean;
 	q?: string | null;
 	field?: { key: string; value: string; multi: boolean } | null;
-	sort?: 'recent' | 'logged' | 'rating' | 'title' | 'added';
+	sort?: 'recent' | 'logged' | 'rating' | 'title' | 'added' | 'plays';
 	page?: number;
 	pageSize?: number;
 }
@@ -889,7 +928,9 @@ export function listItems(userId: number, categoryId: number, statuses: StatusDe
 		logged: `${logged} IS NULL, ${logged} DESC, ${MINE_UPDATED} DESC`,
 		rating: `${rating} IS NULL, ${rating} DESC, i.title COLLATE NOCASE`,
 		title: 'i.title COLLATE NOCASE ASC',
-		added: 'i.created_at DESC'
+		added: 'i.created_at DESC',
+		// last.fm plays of the viewer's own, most first
+		plays: `(SELECT COALESCE(SUM(a.plays), 0) FROM lastfm_albums a WHERE a.item_id = i.id AND a.user_id = me.id) DESC, i.title COLLATE NOCASE`
 	}[f.sort ?? 'recent'];
 
 	const pageSize = f.pageSize ?? 60;
@@ -1001,7 +1042,7 @@ export function recentActivity(userId: number, limit = 15) {
 			 JOIN items i ON i.id = l.item_id
 			 JOIN categories c ON c.id = i.category_id
 			 LEFT JOIN images im ON im.id = i.cover_image_id
-			 WHERE l.user_id = me.id AND ${seesList()}
+			 WHERE l.user_id = me.id AND l.source IS NULL AND ${seesList()}
 			 ORDER BY l.date DESC, l.id DESC
 			 LIMIT ?`
 		)
@@ -1040,12 +1081,14 @@ export function itemStrip(userId: number, kind: 'planned' | 'favorites', limit =
 			 WHERE ${SEES_LIST} AND ${
 					kind === 'favorites'
 						? `${mine('favorite')} = 1`
-						: `${MINE_UP_NEXT} = 1 AND ${mine('status')} IS NOT NULL`
+						: // The planned filter is in SQL: thousands of newer imported albums must not push planned items out of the window
+							`${MINE_UP_NEXT} = 1 AND EXISTS (SELECT 1 FROM json_each(c.statuses) s
+								WHERE json_extract(s.value, '$.key') = ${mine('status')} AND json_extract(s.value, '$.group') = 'planned')`
 				}
 			 ORDER BY ${MINE_UPDATED} DESC
-			 LIMIT 300`
+			 LIMIT ?`
 		)
-		.all(userId) as {
+		.all(userId, limit) as {
 		id: number;
 		title: string;
 		status: string | null;
@@ -1057,16 +1100,5 @@ export function itemStrip(userId: number, kind: 'planned' | 'favorites', limit =
 		img_thumb: string | null;
 		img_source: string | null;
 	}[];
-	const filtered =
-		kind === 'planned'
-			? rows.filter((r) => {
-					try {
-						const st = JSON.parse(r.statuses) as StatusDef[];
-						return st.find((s) => s.key === r.status)?.group === 'planned';
-					} catch {
-						return false;
-					}
-				})
-			: rows;
-	return filtered.slice(0, limit);
+	return rows;
 }

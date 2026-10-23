@@ -1,6 +1,7 @@
 import { todayIso } from '$lib/server/forms';
 import { listCategories } from '$lib/server/services/categories';
-import { journal, logBounds } from '$lib/server/services/journal';
+import { hasListeningLogs, isListeningMode, journal, logBounds } from '$lib/server/services/journal';
+import { getLastfmAccount } from '$lib/server/services/lastfm-sync';
 import { resolveRange } from '$lib/journal';
 import type { PageServerLoad } from './$types';
 
@@ -17,12 +18,19 @@ export const load: PageServerLoad = async ({ locals, url }) => {
 		today,
 		sp.get('range') === 'all-time' ? logBounds(userId, list?.id ?? null) : undefined
 	);
+	// How imported listening shows: ?listening=, else what the person chose on last.fm's settings, else every album
+	const asked = sp.get('listening');
+	// With no account (after "Stop syncing") the imported rows are still there: grouped, not thousands of albums
+	const listening = isListeningMode(asked)
+		? asked
+		: (getLastfmAccount(userId)?.journalMode ?? (hasListeningLogs(userId) ? 'group' : 'all'));
 	const limit = Math.min(Math.max(Number(sp.get('limit')) || PAGE, PAGE), 5000);
 	return {
 		range,
 		today,
 		list: list ? { slug: list.slug, name: list.name, icon: list.icon } : null,
 		limit,
-		...journal(userId, range, today, list?.id ?? null, limit)
+		listening,
+		...journal(userId, range, today, list?.id ?? null, limit, listening)
 	};
 };

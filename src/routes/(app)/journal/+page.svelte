@@ -9,7 +9,11 @@
 
 	let { data } = $props();
 
-	const keep = $derived<Record<string, string>>(data.list ? { list: data.list.slug } : {});
+	// Carried along when the range or a day is picked: the list, and how listening is shown
+	const keep = $derived<Record<string, string>>({
+		...(data.list ? { list: data.list.slug } : {}),
+		...(data.hasListening ? { listening: data.listening } : {})
+	});
 
 	/** The current address with some parameters changed (null removes one); "Show more" is reset. */
 	function hrefWith(changes: Record<string, string | null>) {
@@ -37,6 +41,10 @@
 	});
 
 	const longDate = (iso: string) => `${WEEKDAYS[weekday(iso)]}, ${shortDate(iso)}`;
+	const plural = (n: number, one: string, many: string) => `${n.toLocaleString()} ${n === 1 ? one : many}`;
+	/** The day, with every album shown (what a listening row opens) */
+	const listeningDayHref = (date: string) =>
+		`?${new URLSearchParams({ ...keep, from: date, to: date, listening: 'all' })}`;
 	const days = (n: number) => `${n} ${n === 1 ? 'day' : 'days'}`;
 
 	// Heatmap shades: the theme's accent, stronger for busier days
@@ -75,6 +83,18 @@
 				<option value={c.slug}>{c.icon} {c.name}{c.ownerName ? ` (${c.ownerName}'s)` : ''}</option>
 			{/each}
 		</select>
+		{#if data.hasListening}
+			<select
+				class="input min-h-10 w-auto"
+				aria-label="Listening from last.fm"
+				value={data.listening}
+				onchange={(e) => goto(hrefWith({ listening: (e.currentTarget as HTMLSelectElement).value }))}
+			>
+				<option value="group">Listening: grouped by day</option>
+				<option value="all">Listening: every album</option>
+				<option value="hide">Listening: hidden</option>
+			</select>
+		{/if}
 	</div>
 
 	<!-- Stats -->
@@ -168,41 +188,83 @@
 				</div>
 				<div class="grid gap-3 sm:grid-cols-2 lg:grid-cols-3">
 					{#each g.entries as e (e.id)}
-						<a href="/items/{e.itemId}" class="card flex gap-3 p-3 hover:bg-surface-2">
-							<div
-								class="flex h-24 w-16 shrink-0 items-center justify-center overflow-hidden rounded-lg bg-surface-2 text-2xl"
+						{#if e.kind === 'listening'}
+							<a
+								href={listeningDayHref(e.date)}
+								class="card flex items-center gap-3 p-3 hover:bg-surface-2 sm:col-span-2 lg:col-span-3"
 							>
-								{#if e.imageUrl}
-									<img src={e.imageUrl} alt="" loading="lazy" class="h-full w-full object-cover" />
-								{:else}
-									<span aria-hidden="true">{e.categoryIcon}</span>
-								{/if}
-							</div>
-							<div class="min-w-0 flex-1 space-y-0.5">
-								<p class="truncate font-semibold">{e.title}</p>
-								<p
-									class="flex items-center gap-1.5 text-xs font-medium"
-									style="color: {categoryColor(e.categoryColor)}"
+								<div class="flex shrink-0 -space-x-3">
+									{#each e.covers as src (src)}
+										<img
+											{src}
+											alt=""
+											loading="lazy"
+											class="h-12 w-12 rounded-lg border-2 border-surface object-cover"
+										/>
+									{:else}
+										<span
+											class="flex h-12 w-12 items-center justify-center rounded-lg bg-surface-2 text-2xl"
+											aria-hidden="true">🎧</span
+										>
+									{/each}
+								</div>
+								<div class="min-w-0 flex-1">
+									<p class="truncate font-semibold">
+										<span aria-hidden="true">🎧</span>
+										{'Listened to ' +
+											plural(e.albums, 'album', 'albums') +
+											' · ' +
+											plural(e.tracks, 'track', 'tracks')}
+									</p>
+									<p class="text-xs text-muted">
+										From last.fm · see the {e.albums === 1 ? 'album' : 'albums'}
+									</p>
+								</div>
+								<Icon name="chevron-right" size={16} class="shrink-0 text-muted" />
+							</a>
+						{:else}
+							<a href="/items/{e.itemId}" class="card flex gap-3 p-3 hover:bg-surface-2">
+								<div
+									class="flex h-24 w-16 shrink-0 items-center justify-center overflow-hidden rounded-lg bg-surface-2 text-2xl"
 								>
-									<span class="h-1.5 w-1.5 rounded-full bg-current"></span>
-									{e.categoryName}
-								</p>
-								{#if e.episode}<p class="truncate text-sm">{e.episode}</p>{/if}
-								{#if e.rating !== null}<Rating value={e.rating} class="text-sm" />{/if}
-								{#if e.location}
-									<p class="flex items-center gap-1 truncate text-xs text-muted">
-										<Icon name="pin" size={12} />
-										<span class="truncate">{e.location}</span>
+									{#if e.imageUrl}
+										<img src={e.imageUrl} alt="" loading="lazy" class="h-full w-full object-cover" />
+									{:else}
+										<span aria-hidden="true">{e.categoryIcon}</span>
+									{/if}
+								</div>
+								<div class="min-w-0 flex-1 space-y-0.5">
+									<p class="truncate font-semibold">{e.title}</p>
+									<p
+										class="flex items-center gap-1.5 text-xs font-medium"
+										style="color: {categoryColor(e.categoryColor)}"
+									>
+										<span class="h-1.5 w-1.5 rounded-full bg-current"></span>
+										{e.categoryName}
 									</p>
-								{/if}
-								{#if e.setlistSongs}
-									<p class="flex items-center gap-1 text-xs text-muted">
-										<Icon name="music" size={12} /> Setlist · {e.setlistSongs} songs
-									</p>
-								{/if}
-								{#if e.notes}<p class="line-clamp-2 text-xs text-muted">{e.notes}</p>{/if}
-							</div>
-						</a>
+									{#if e.episode}<p class="truncate text-sm">{e.episode}</p>{/if}
+									{#if e.rating !== null}<Rating value={e.rating} class="text-sm" />{/if}
+									{#if e.location}
+										<p class="flex items-center gap-1 truncate text-xs text-muted">
+											<Icon name="pin" size={12} />
+											<span class="truncate">{e.location}</span>
+										</p>
+									{/if}
+									{#if e.plays}
+										<p class="flex items-center gap-1 text-xs text-muted">
+											<span aria-hidden="true">🎧</span>
+											{plural(e.plays, 'track', 'tracks') + ' · last.fm'}
+										</p>
+									{/if}
+									{#if e.setlistSongs}
+										<p class="flex items-center gap-1 text-xs text-muted">
+											<Icon name="music" size={12} /> Setlist · {e.setlistSongs} songs
+										</p>
+									{/if}
+									{#if e.notes}<p class="line-clamp-2 text-xs text-muted">{e.notes}</p>{/if}
+								</div>
+							</a>
+						{/if}
 					{/each}
 				</div>
 			</section>

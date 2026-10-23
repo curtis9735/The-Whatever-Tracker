@@ -67,8 +67,29 @@ export const KINDS: KindInfo[] = [
 		gives: 'Cover art, artist and release date',
 		group: 'Albums',
 		order: 6
+	},
+	{
+		key: 'lastfm:album',
+		provider: 'lastfm',
+		label: 'Albums (last.fm)',
+		icon: '💿',
+		gives: 'Cover art, genres, a short description, listeners and plays',
+		group: 'Albums',
+		order: 7
+	},
+	{
+		key: 'lastfm:artist',
+		provider: 'lastfm',
+		label: 'Music artists (last.fm)',
+		icon: '🎤',
+		gives: 'Photo, genres, a short bio, listeners and plays',
+		group: 'Artists',
+		order: 8
 	}
 ];
+
+/** Kinds whose lists hold albums (listening history from last.fm is matched against these) */
+export const ALBUM_KINDS = ['lastfm:album', 'musicbrainz:album'];
 
 export const KIND_BY_KEY = new Map(KINDS.map((k) => [k.key, k]));
 
@@ -94,6 +115,7 @@ export const PROVIDER_LABELS: Record<string, string> = {
 	igdb: 'IGDB',
 	bgg: 'BoardGameGeek',
 	musicbrainz: 'MusicBrainz',
+	lastfm: 'last.fm',
 	setlistfm: 'setlist.fm',
 	openfoodfacts: 'Open Food Facts'
 };

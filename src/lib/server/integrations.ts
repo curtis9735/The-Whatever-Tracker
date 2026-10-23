@@ -54,6 +54,11 @@ export const INTEGRATIONS: Integration[] = [
 		'Artists and albums, with cover art',
 		'No key needed. MusicBrainz asks every app to identify itself with contact info: an email address or a URL.'
 	),
+	fromProvider(
+		'lastfm',
+		'Album and artist details, and your listening history',
+		'Create an API account at last.fm/api/account/create (any name and description, no callback URL needed). Copy the API key; the shared secret isn’t used.'
+	),
 	{
 		id: 'setlistfm',
 		label: 'setlist.fm',

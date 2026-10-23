@@ -26,7 +26,10 @@ services:
       XFF_DEPTH: '1'
       # adapter-node's default limit is 512K, far too small for phone photos
       BODY_SIZE_LIMIT: 25M
-      TZ: ${TZ:-America/New_York}
+      # Your time zone. Days are split at the server's local midnight, so this decides which day a log or an
+      # imported last.fm play lands on. Set TZ to yours (for example America/Chicago); without it the server
+      # runs on UTC, which can push an evening's logs onto tomorrow.
+      TZ: ${TZ:-UTC}
       # Metadata sources (optional). You can instead enter keys in the app under
       # Me → Integrations; keys saved there take priority over these.
       TMDB_API_KEY: ${TMDB_API_KEY:-}
@@ -34,5 +37,6 @@ services:
       IGDB_CLIENT_SECRET: ${IGDB_CLIENT_SECRET:-}
       BGG_API_TOKEN: ${BGG_API_TOKEN:-}
       SETLISTFM_API_KEY: ${SETLISTFM_API_KEY:-}
+      LASTFM_API_KEY: ${LASTFM_API_KEY:-}
       MUSICBRAINZ_CONTACT: ${MUSICBRAINZ_CONTACT:-}
     restart: unless-stopped

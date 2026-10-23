@@ -6,6 +6,7 @@ import { ProviderError } from '../providers/util';
 import { getCategoryById } from './categories';
 import { addImage, createItem, getItem, updateItem } from './items';
 import { listAccess } from './access';
+import { buildAlbumIndex, findAlbumItem, parseLastfmAlbumId } from '../album-match';
 import { addLogWithShow, afterAddPath } from './concerts';
 import { refreshItemReleases } from './releases';
 import { libraryMatches, reindexItem } from '../search/local';
@@ -14,6 +15,7 @@ import type { NormalizedMetadata } from '$lib/types';
 export function metadataToStore(d: NormalizedMetadata) {
 	return {
 		year: d.year ?? null,
+		...(d.artist ? { artist: d.artist } : {}),
 		genres: d.genres ?? [],
 		facts: d.facts,
 		url: d.url ?? null,
@@ -93,10 +95,22 @@ export async function addFromProvider(userId: number, input: AddFromProviderInpu
 
 	// 404 if the list isn't the viewer's, 403 if it's shared with them only to view
 	const { category } = getCategoryById(userId, input.categoryId, 'edit');
+	// An album the list already holds (from MusicBrainz, last.fm or typed by hand) opens as it is
+	const album = input.provider === 'lastfm' && input.kind === 'album' ? parseLastfmAlbumId(input.id) : null;
+	const albumIndex = album ? buildAlbumIndex(category.id) : null;
+	if (album && albumIndex) {
+		const held = findAlbumItem(albumIndex, album.artist, album.title, input.id);
+		if (held) return { id: held, created: false };
+	}
 	if (category.userId !== userId && ownersItem(category.userId, input.provider, input.kind, input.id)) {
 		error(409, hiddenClash(category.ownerName));
 	}
 	const d = await fetchDetails(input.provider, input.kind, input.id);
+	// last.fm may have corrected the spelling of the name that was searched for
+	if (albumIndex && d.artist) {
+		const held = findAlbumItem(albumIndex, d.artist, d.title);
+		if (held) return { id: held, created: false };
+	}
 	const status =
 		input.status && category.statuses.some((s) => s.key === input.status)
 			? input.status
@@ -150,7 +164,7 @@ export function parseMatch(form: FormData): ProviderRef | null {
 	const id = String(form.get('match_id') ?? '');
 	if (!provider || !kind || !id) return null;
 	const p = getProvider(provider);
-	if (!p || !p.kinds.includes(`${provider}:${kind}`) || !/^[\w-]{1,100}$/.test(id)) return null;
+	if (!p || !p.kinds.includes(`${provider}:${kind}`) || !/^[\w-]{1,400}$/.test(id)) return null;
 	return { provider, kind, id };
 }
 

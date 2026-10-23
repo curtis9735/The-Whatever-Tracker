@@ -133,6 +133,17 @@
 		return new Date(`${d}T00:00:00`).toLocaleDateString(undefined, { dateStyle: 'medium' });
 	}
 
+	/** "Mon, Oct 20", with the year when it isn't this one */
+	function weekdayDate(d: string) {
+		const date = new Date(`${d}T00:00:00`);
+		return date.toLocaleDateString(undefined, {
+			weekday: 'short',
+			month: 'short',
+			day: 'numeric',
+			...(date.getFullYear() === new Date().getFullYear() ? {} : { year: 'numeric' })
+		});
+	}
+
 	const isUrl = (s: string) => /^https?:\/\//.test(s);
 
 	// Items added by hand in a list with a metadata source can be matched afterwards
@@ -252,6 +263,16 @@
 				/>
 			{/if}
 		</div>
+
+		{#if data.listening}
+			<p class="mt-3 text-sm">
+				<span aria-hidden="true">🎧</span>
+				{'Your plays: ' + data.listening.plays.toLocaleString()}
+				{#if data.listening.lastPlayed}
+					<span class="text-muted">{' · last played ' + weekdayDate(data.listening.lastPlayed)}</span>
+				{/if}
+			</p>
+		{/if}
 
 		{#if isMovie && (liveHere || finishedHere)}
 			<div class="mt-4">
@@ -585,6 +606,7 @@
 				<ol class="relative space-y-4 border-l-2 border-border pl-5">
 					{#each data.logs as log, li (log.id)}
 						{@const sl = (log.external as { setlist?: SetlistEvent } | null)?.setlist}
+						{@const lfm = (log.external as { lastfm?: { plays: number } } | null)?.lastfm}
 						<li class="relative">
 							<span class="absolute top-1.5 -left-[27px] h-3 w-3 rounded-full border-2 border-bg bg-accent"
 							></span>
@@ -596,6 +618,12 @@
 											<p class="flex items-center gap-1 text-sm">
 												<Icon name="check" size={14} class="shrink-0 text-accent" />
 												<span>{logEpisodeLabel(log.episodes)}</span>
+											</p>
+										{/if}
+										{#if lfm}
+											<p class="flex items-center gap-1 text-sm text-muted">
+												<span aria-hidden="true">🎧</span>
+												{lfm.plays + (lfm.plays === 1 ? ' track' : ' tracks') + ' · last.fm'}
 											</p>
 										{/if}
 										{#if log.location}

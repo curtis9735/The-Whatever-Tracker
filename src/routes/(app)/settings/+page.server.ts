@@ -15,9 +15,11 @@ import { getIntegration, integrationsView, runIntegrationTest } from '$lib/serve
 import {
 	credentialKeysFor,
 	credentialSource,
+	keys as providerKeys,
 	saveCredentials,
 	type CredentialKey
 } from '$lib/server/settings';
+import { getLastfmAccount, kickLastfm, resetLastfmAuthErrors } from '$lib/server/services/lastfm-sync';
 import { listBackups } from '$lib/server/backup';
 import { APP_VERSION, cfg } from '$lib/server/config';
 import type { Actions, PageServerLoad } from './$types';
@@ -28,7 +30,9 @@ export const load: PageServerLoad = async ({ locals }) => {
 		integrations: integrationsView(isAdmin),
 		version: APP_VERSION,
 		backups: isAdmin ? listBackups().map((b) => ({ ...b, modified: b.modified.toISOString() })) : [],
-		dataDir: isAdmin ? cfg().dataDir : null
+		dataDir: isAdmin ? cfg().dataDir : null,
+		// The "Your last.fm" card: the person's own connection only
+		lastfm: { ready: !!providerKeys().lastfmKey, account: getLastfmAccount(locals.user!.id) }
 	};
 };
 
@@ -104,6 +108,9 @@ export const actions: Actions = {
 		) {
 			return fail(400, { integration: id, error: 'Enter an email address or a URL starting with https://.' });
 		}
+		if (changes.LASTFM_API_KEY && !/^[0-9a-f]{32}$/i.test(changes.LASTFM_API_KEY)) {
+			return fail(400, { integration: id, error: 'A last.fm API key is 32 letters and digits.' });
+		}
 		if (!Object.keys(changes).length) {
 			return fail(400, { integration: id, error: 'Type a new value to save.' });
 		}
@@ -113,7 +120,14 @@ export const actions: Actions = {
 			return { integration: id, success: 'Saved. Fill in the remaining field to switch it on.' };
 		}
 		const result = await runIntegrationTest(id);
-		if (result.ok) return { integration: id, success: 'Saved. The connection works.' };
+		if (result.ok) {
+			// A new last.fm key un-pauses accounts the old one stopped, and syncing resumes right away
+			if (changes.LASTFM_API_KEY) {
+				resetLastfmAuthErrors();
+				kickLastfm();
+			}
+			return { integration: id, success: 'Saved. The connection works.' };
+		}
 		if (result.code === 'auth') {
 			saveCredentials(previous, locals.user!.id);
 			return fail(400, { integration: id, error: `${result.message}. Nothing was saved.` });

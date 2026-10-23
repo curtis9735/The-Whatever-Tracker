@@ -10,7 +10,8 @@ export const CREDENTIALS = {
 	IGDB_CLIENT_SECRET: { provider: 'igdb', label: 'Client secret', secret: true },
 	BGG_API_TOKEN: { provider: 'bgg', label: 'Application token', secret: true },
 	SETLISTFM_API_KEY: { provider: 'setlistfm', label: 'API key', secret: true },
-	MUSICBRAINZ_CONTACT: { provider: 'musicbrainz', label: 'Contact email or URL', secret: false }
+	MUSICBRAINZ_CONTACT: { provider: 'musicbrainz', label: 'Contact email or URL', secret: false },
+	LASTFM_API_KEY: { provider: 'lastfm', label: 'API key', secret: true }
 } as const;
 
 export type CredentialKey = keyof typeof CREDENTIALS;
@@ -103,7 +104,8 @@ export function keys() {
 		igdbClientSecret: credential('IGDB_CLIENT_SECRET'),
 		bggToken: credential('BGG_API_TOKEN'),
 		setlistfmKey: credential('SETLISTFM_API_KEY'),
-		musicbrainzContact: credential('MUSICBRAINZ_CONTACT')
+		musicbrainzContact: credential('MUSICBRAINZ_CONTACT'),
+		lastfmKey: credential('LASTFM_API_KEY')
 	};
 }
 

@@ -1,4 +1,24 @@
-import { describe, expect, it } from 'vitest';
+import { afterEach, describe, expect, it, vi } from 'vitest';
+
+vi.mock('$env/dynamic/private', async () => {
+	const fs = await import('node:fs');
+	const os = await import('node:os');
+	const path = await import('node:path');
+	const dir = fs.mkdtempSync(path.join(os.tmpdir(), 'wt-normalizers-'));
+	// A made-up key: the real API is never called, fetch is replaced in these tests
+	return {
+		env: {
+			DATA_DIR: dir,
+			MIGRATIONS_DIR: path.resolve('drizzle'),
+			LASTFM_API_KEY: '0123456789abcdef0123456789abcdef'
+		}
+	};
+});
+vi.mock('./artist-images', async (orig) => ({
+	...(await orig<typeof import('./artist-images')>()),
+	artistImage: vi.fn(async () => 'https://photos.example/radiohead.jpg')
+}));
+
 import { normalizeTmdbMovie, normalizeTmdbSearch, normalizeTmdbTv } from './tmdb';
 import { normalizeIgdbGame, normalizeIgdbSearch } from './igdb';
 import { normalizeBggThing, parseBggXml, rankBggSearch } from './bgg';
@@ -6,6 +26,21 @@ import { luceneEscape, normalizeMbArtist, normalizeMbReleaseGroup } from './musi
 import { normalizeSetlist } from './setlistfm';
 import { normalizeOff } from './openfoodfacts';
 import { decodeEntities } from './util';
+import {
+	cleanWiki,
+	lastfm,
+	LastfmError,
+	lfmGet,
+	normalizeLfmAlbum,
+	normalizeLfmAlbumSearch,
+	normalizeLfmArtist,
+	normalizeLfmArtistSearch,
+	parseRecentTracks,
+	pickImage,
+	tagsToGenres,
+	toArray
+} from './lastfm';
+import { lastfmArtistId, parseLastfmAlbumId, parseLastfmArtistId } from '../album-match';
 
 describe('TMDB', () => {
 	const multi = {
@@ -207,5 +242,261 @@ describe('Open Food Facts', () => {
 		});
 		expect(p).toMatchObject({ title: 'Hot sauce', brand: 'Cholula', imageUrl: 'https://img/x.jpg' });
 		expect(normalizeOff('1', { status: 0 })).toBeNull();
+	});
+});
+
+describe('last.fm', () => {
+	const STAR = 'https://lastfm.freetls.fastly.net/i/u/300x300/2a96cbd8b46e442fc41c2b86b821562f.png';
+	const img = (size: string, url: string) => ({ size, '#text': url });
+
+	afterEach(() => vi.unstubAllGlobals());
+
+	/** A fetch that answers with this body and status, and remembers the URLs asked for */
+	function fakeLastfm(body: unknown, status = 200) {
+		const urls: URL[] = [];
+		vi.stubGlobal(
+			'fetch',
+			vi.fn(async (input: string | URL) => {
+				urls.push(new URL(String(input)));
+				return new Response(typeof body === 'string' ? body : JSON.stringify(body), { status });
+			})
+		);
+		return urls;
+	}
+
+	it('wraps a lone object in a list', () => {
+		expect(toArray(undefined)).toEqual([]);
+		expect(toArray({ a: 1 })).toEqual([{ a: 1 }]);
+		expect(toArray([1, 2])).toEqual([1, 2]);
+	});
+
+	it('reads a search with a single result that comes back as an object', () => {
+		const r = normalizeLfmAlbumSearch({
+			results: {
+				albummatches: {
+					album: {
+						name: 'OK Computer',
+						artist: 'Radiohead',
+						url: 'https://www.last.fm/music/Radiohead/OK+Computer',
+						image: [img('small', 'https://img/s.png'), img('large', 'https://img/l.png')]
+					}
+				}
+			}
+		});
+		expect(r).toHaveLength(1);
+		expect(r[0]).toMatchObject({
+			kindKey: 'lastfm:album',
+			title: 'OK Computer',
+			subtitle: 'Radiohead',
+			imageUrl: 'https://img/l.png'
+		});
+		expect(parseLastfmAlbumId(r[0].id)).toEqual({ artist: 'Radiohead', title: 'OK Computer' });
+
+		const a = normalizeLfmArtistSearch({
+			results: { artistmatches: { artist: { name: 'Radiohead', listeners: '4821733', url: 'u' } } }
+		});
+		expect(a[0]).toMatchObject({ kindKey: 'lastfm:artist', subtitle: '4,821,733 listeners' });
+		expect(parseLastfmArtistId(a[0].id)).toBe('Radiohead');
+	});
+
+	it('drops the placeholder star and empty images', () => {
+		expect(pickImage([img('extralarge', STAR), img('large', '')])).toBeUndefined();
+		expect(pickImage([img('extralarge', STAR), img('large', 'https://img/l.png')])).toBe('https://img/l.png');
+		expect(pickImage(img('large', 'https://img/one.png'))).toBe('https://img/one.png');
+		expect(pickImage(undefined)).toBeUndefined();
+	});
+
+	it('cleans wiki text', () => {
+		expect(
+			cleanWiki(
+				'Kid A is the <a href="https://www.last.fm/x">fourth album</a> &amp; a hit. <a href="https://www.last.fm/music/R/Kid+A">Read more on Last.fm</a>'
+			)
+		).toBe('Kid A is the fourth album & a hit.');
+		expect(cleanWiki('<a href="x">Read more on Last.fm</a>')).toBeUndefined();
+		expect(cleanWiki(undefined)).toBeUndefined();
+		const long = cleanWiki('word '.repeat(300))!;
+		expect(long.length).toBeLessThanOrEqual(600);
+		expect(long.endsWith('…')).toBe(true);
+	});
+
+	it('keeps the top useful tags as genres', () => {
+		const tag = (name: string) => ({ name });
+		const genres = tagsToGenres({
+			tag: [
+				tag('seen live'),
+				tag('rock'),
+				tag('1997'),
+				tag('Albums I Own'),
+				tag('alternative'),
+				tag('favorite'),
+				tag('vinyl'),
+				tag('electronic'),
+				tag('experimental'),
+				tag('90s'),
+				tag('art rock'),
+				tag('britpop'),
+				tag('indie')
+			]
+		});
+		expect(genres).toEqual(['rock', 'alternative', 'electronic', 'experimental', '90s', 'art rock']);
+		expect(tagsToGenres({ tag: { name: 'rock' } })).toEqual(['rock']);
+		expect(tagsToGenres(undefined)).toEqual([]);
+	});
+
+	it('formats album facts', () => {
+		const d = normalizeLfmAlbum({
+			name: 'Kid A',
+			artist: 'Radiohead',
+			url: 'https://www.last.fm/music/Radiohead/Kid+A',
+			image: [img('extralarge', 'https://img/xl.png')],
+			listeners: '1234567',
+			playcount: '98765432',
+			tags: { tag: [{ name: 'electronic' }] },
+			tracks: { track: [{ duration: '300' }, { duration: '3000' }] },
+			wiki: { summary: 'An album. <a href="u">Read more on Last.fm</a>' }
+		});
+		expect(d).toMatchObject({
+			kindKey: 'lastfm:album',
+			title: 'Kid A',
+			subtitle: 'Radiohead',
+			artist: 'Radiohead',
+			description: 'An album.',
+			imageUrl: 'https://img/xl.png',
+			genres: ['electronic']
+		});
+		expect(d.facts).toEqual([
+			{ label: 'Artist', value: 'Radiohead' },
+			{ label: 'Tracks', value: '2' },
+			{ label: 'Length', value: '55 min' },
+			{ label: 'Listeners', value: '1,234,567' },
+			{ label: 'Scrobbles worldwide', value: '98,765,432' }
+		]);
+		// No track durations: no Length fact
+		const bare = normalizeLfmAlbum({ name: 'X', artist: 'Y', tracks: { track: { duration: '0' } } });
+		expect(bare.facts.map((f) => f.label)).toEqual(['Artist', 'Tracks']);
+	});
+
+	it('formats artist facts, with the first five similar artists', () => {
+		const d = normalizeLfmArtist(
+			{
+				name: 'Radiohead',
+				stats: { listeners: '10', playcount: '2000' },
+				similar: { artist: ['a', 'b', 'c', 'd', 'e', 'f'].map((name) => ({ name })) },
+				bio: { summary: 'A band.' }
+			},
+			'https://photo'
+		);
+		expect(d.imageUrl).toBe('https://photo');
+		expect(d.facts).toContainEqual({ label: 'Similar', value: 'a, b, c, d, e' });
+		expect(d.facts).toContainEqual({ label: 'Scrobbles worldwide', value: '2,000' });
+	});
+
+	it('takes the artist photo from artistImage, since last.fm only has a star', async () => {
+		fakeLastfm({ artist: { name: 'Radiohead', image: [img('extralarge', STAR)] } });
+		const d = await lastfm.details('artist', lastfmArtistId('Radiohead'));
+		expect(d.imageUrl).toBe('https://photos.example/radiohead.jpg');
+	});
+
+	it('maps last.fm errors', async () => {
+		fakeLastfm({ error: 6, message: 'Album not found' });
+		await expect(lfmGet('album.getInfo', {})).rejects.toMatchObject({ code: 'notfound', lfm: 6 });
+
+		fakeLastfm({ error: 10, message: 'Invalid API key' }, 403);
+		await expect(lfmGet('album.getInfo', {})).rejects.toMatchObject({ code: 'auth', lfm: 10 });
+
+		fakeLastfm({ error: 29, message: 'Rate limit exceeded' }, 429);
+		await expect(lfmGet('album.getInfo', {})).rejects.toMatchObject({ code: 'rate', lfm: 29 });
+
+		fakeLastfm({ error: 17, message: 'Login: User required to be logged in' });
+		await expect(lfmGet('user.getRecentTracks', {})).rejects.toMatchObject({
+			code: 'private',
+			lfm: 17
+		});
+
+		fakeLastfm({ error: 8, message: 'Operation failed' });
+		await expect(lfmGet('album.getInfo', {})).rejects.toMatchObject({ code: 'unreachable', lfm: 8 });
+
+		fakeLastfm('<html>Service Unavailable</html>', 503);
+		const e = await lfmGet('album.getInfo', {}).catch((x) => x);
+		expect(e).toBeInstanceOf(LastfmError);
+		expect(e).toMatchObject({ code: 'unreachable', lfm: null });
+
+		vi.stubGlobal(
+			'fetch',
+			vi.fn(async () => {
+				throw new TypeError('fetch failed');
+			})
+		);
+		await expect(lfmGet('album.getInfo', {})).rejects.toMatchObject({ code: 'unreachable' });
+	});
+
+	it('sends the key, format and parameters, leaving out empty ones', async () => {
+		const urls = fakeLastfm({ ok: 1 });
+		await lfmGet('user.getRecentTracks', { user: 'rj', limit: 200, from: undefined, to: 99 });
+		const q = urls[0].searchParams;
+		expect(q.get('method')).toBe('user.getRecentTracks');
+		expect(q.get('format')).toBe('json');
+		expect(q.get('api_key')).toBe('0123456789abcdef0123456789abcdef');
+		expect(q.get('limit')).toBe('200');
+		expect(q.get('to')).toBe('99');
+		expect(q.has('from')).toBe(false);
+	});
+
+	it('reads recent tracks: skips now playing, keeps albumless plays', () => {
+		const { total, plays } = parseRecentTracks({
+			recenttracks: {
+				'@attr': { total: '118532' },
+				track: [
+					{
+						name: 'Live now',
+						artist: { '#text': 'Radiohead', mbid: '' },
+						album: { '#text': 'Kid A', mbid: '' },
+						'@attr': { nowplaying: 'true' }
+					},
+					{
+						name: 'Everything In Its Right Place',
+						artist: { '#text': 'Radiohead', mbid: 'a74b1b7f' },
+						album: { '#text': 'Kid A', mbid: 'b1392450' },
+						image: [img('extralarge', 'https://img/kida.png')],
+						date: { uts: '1700000100' }
+					},
+					{
+						name: 'Loose single',
+						artist: { '#text': 'Someone' },
+						album: { '#text': '' },
+						image: [img('extralarge', STAR)],
+						date: { uts: '1700000000' }
+					}
+				]
+			}
+		});
+		expect(total).toBe(118532);
+		expect(plays).toEqual([
+			{
+				uts: 1700000100,
+				artist: 'Radiohead',
+				artistMbid: 'a74b1b7f',
+				album: 'Kid A',
+				albumMbid: 'b1392450',
+				track: 'Everything In Its Right Place',
+				imageUrl: 'https://img/kida.png'
+			},
+			{
+				uts: 1700000000,
+				artist: 'Someone',
+				artistMbid: null,
+				album: '',
+				albumMbid: null,
+				track: 'Loose single',
+				imageUrl: null
+			}
+		]);
+		// One track comes back as an object, an empty history as no track at all
+		const one = { name: 't', artist: { '#text': 'a' }, date: { uts: '5' } };
+		expect(parseRecentTracks({ recenttracks: { track: one } }).plays).toHaveLength(1);
+		expect(parseRecentTracks({ recenttracks: { '@attr': { total: '0' } } })).toEqual({
+			total: 0,
+			plays: []
+		});
 	});
 });

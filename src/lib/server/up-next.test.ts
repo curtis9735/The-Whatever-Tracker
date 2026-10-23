@@ -8,9 +8,9 @@ vi.mock('$env/dynamic/private', async () => {
 	return { env: { DATA_DIR: dir, MIGRATIONS_DIR: path.resolve('drizzle') } };
 });
 
-const { db, schema } = await import('./db');
+const { db, rawDb, schema } = await import('./db');
 const { createCategoryFromTemplate, getCategoryById, updateCategory } = await import('./services/categories');
-const { createItem, itemStrip } = await import('./services/items');
+const { addLog, createItem, itemStrip, recentActivity } = await import('./services/items');
 
 describe('Up next on the home page', () => {
 	const user = db()
@@ -66,5 +66,43 @@ describe('Up next on the home page', () => {
 			providerKinds: category.providerKinds
 		});
 		expect(getCategoryById(user.id, whiskey.id).category.showUpNext).toBe(false);
+	});
+});
+
+describe('Up next after a big last.fm import', () => {
+	const user = db()
+		.insert(schema.users)
+		.values({ username: 'listener', displayName: 'Listener', passwordHash: 'x' })
+		.returning()
+		.get();
+	const albums = createCategoryFromTemplate(user.id, 'albums');
+
+	it('still shows planned albums when 500 newer listened ones fill the list', () => {
+		for (const t of ['Wish A', 'Wish B', 'Wish C']) {
+			createItem(user.id, { categoryId: albums.id, title: t, status: 'to-listen' });
+		}
+		for (let i = 0; i < 500; i++)
+			createItem(user.id, { categoryId: albums.id, title: `Heard ${i}`, status: 'listened' });
+		// Every imported album is newer than the wish list
+		rawDb().prepare("UPDATE items SET updated_at = updated_at + 100000 WHERE status = 'listened'").run();
+		expect(
+			itemStrip(user.id, 'planned', 12)
+				.map((r) => r.title)
+				.sort()
+		).toEqual(['Wish A', 'Wish B', 'Wish C']);
+	});
+
+	it('leaves imported listening out of recent activity', () => {
+		const item = createItem(user.id, { categoryId: albums.id, title: 'Played Lots', status: 'listened' });
+		const { category } = getCategoryById(user.id, albums.id);
+		addLog(user.id, item.id, { date: '2026-10-01', notes: 'by hand' }, category.statuses);
+		rawDb()
+			.prepare(
+				"INSERT INTO item_logs (item_id, user_id, date, external, source, source_key, created_at) VALUES (?, ?, '2026-10-20', '{\"lastfm\":{\"plays\":9}}', 'lastfm', '1:2026-10-20', ?)"
+			)
+			.run(item.id, user.id, Date.now());
+		const dates = recentActivity(user.id).map((r) => r.date);
+		expect(dates).toContain('2026-10-01');
+		expect(dates).not.toContain('2026-10-20');
 	});
 });

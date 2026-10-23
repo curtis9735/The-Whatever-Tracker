@@ -1,7 +1,10 @@
 import { rawDb } from '../db';
 
-/** `auth` means the source rejected our credentials (used to refuse saving a bad key). */
-export type ProviderErrorCode = 'auth' | 'rate' | 'notfound' | 'unreachable' | 'other';
+/**
+ * `auth` means the source rejected our credentials (used to refuse saving a bad key).
+ * `private` is a profile whose owner hides it (last.fm listening history).
+ */
+export type ProviderErrorCode = 'auth' | 'rate' | 'notfound' | 'unreachable' | 'private' | 'other';
 
 export class ProviderError extends Error {
 	constructor(

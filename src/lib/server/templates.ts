@@ -118,13 +118,14 @@ export const TEMPLATES: CategoryTemplate[] = [
 		name: 'Albums',
 		icon: '💿',
 		color: 'teal',
-		description: 'Albums and EPs from MusicBrainz, with cover art.',
+		description:
+			'Albums and EPs with cover art, from last.fm and MusicBrainz. Connect last.fm in Settings to fill it with everything you’ve listened to.',
 		statuses: [
 			{ key: 'to-listen', label: 'To listen', group: 'planned' },
 			{ key: 'listened', label: 'Listened', group: 'done' },
 			{ key: 'owned', label: 'Owned', group: 'active' }
 		],
-		providerKinds: ['musicbrainz:album'],
+		providerKinds: ['lastfm:album', 'musicbrainz:album'],
 		fields: [
 			{ key: 'format', label: 'Format', type: 'select', options: ['Vinyl', 'CD', 'Digital', 'Cassette'] }
 		]

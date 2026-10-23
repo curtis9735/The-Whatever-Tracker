@@ -12,6 +12,7 @@ import {
 } from '$lib/server/auth';
 import { startBackupScheduler } from '$lib/server/backup';
 import { startReleaseScheduler } from '$lib/server/services/releases';
+import { startLastfmScheduler } from '$lib/server/services/lastfm-sync';
 import { startWatchingScheduler } from '$lib/server/services/watching';
 
 export const init: ServerInit = async () => {
@@ -27,6 +28,7 @@ export const init: ServerInit = async () => {
 	startBackupScheduler();
 	startReleaseScheduler();
 	startWatchingScheduler();
+	startLastfmScheduler();
 	console.log(`[startup] data directory: ${c.dataDir}`);
 };
 

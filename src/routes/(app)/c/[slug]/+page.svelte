@@ -115,6 +115,9 @@
 			<option value="rating" selected={f.sort === 'rating'}>Highest rated</option>
 			<option value="title" selected={f.sort === 'title'}>Title A–Z</option>
 			<option value="added" selected={f.sort === 'added'}>Date added</option>
+			{#if data.hasPlays || f.sort === 'plays'}
+				<option value="plays" selected={f.sort === 'plays'}>Most played</option>
+			{/if}
 		</select>
 	</form>
 	<div class="ml-auto flex rounded-lg border border-border">

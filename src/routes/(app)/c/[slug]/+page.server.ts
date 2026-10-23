@@ -2,9 +2,10 @@ import { getCategoryBySlug } from '$lib/server/services/categories';
 import { listItems, statusCounts, type ListFilters } from '$lib/server/services/items';
 import { rawDb } from '$lib/server/db';
 import { parseRatingInput } from '$lib/ratings';
+import { ALBUM_KINDS } from '$lib/kinds';
 import type { PageServerLoad } from './$types';
 
-const SORTS = ['recent', 'logged', 'rating', 'title', 'added'] as const;
+const SORTS = ['recent', 'logged', 'rating', 'title', 'added', 'plays'] as const;
 
 export const load: PageServerLoad = async ({ locals, params, url }) => {
 	const userId = locals.user!.id;
@@ -46,8 +47,19 @@ export const load: PageServerLoad = async ({ locals, params, url }) => {
 			.all(category.id) as { name: string }[]
 	).map((t) => t.name);
 
+	// "Most played" is for lists of albums, and for any list the viewer has plays in
+	const hasPlays =
+		category.providerKinds.some((k) => (ALBUM_KINDS as readonly string[]).includes(k)) ||
+		!!rawDb()
+			.prepare(
+				`SELECT 1 FROM lastfm_albums a JOIN items i ON i.id = a.item_id
+				 WHERE a.user_id = ? AND i.category_id = ? AND a.plays > 0 LIMIT 1`
+			)
+			.get(userId, category.id);
+
 	return {
 		category,
+		hasPlays,
 		cardFields: itemFields.filter((f) => f.showOnCard),
 		filterable,
 		rows,

@@ -78,6 +78,20 @@
       "when": 1792461024517,
       "tag": "0010_live_checkins",
       "breakpoints": true
+    },
+    {
+      "idx": 11,
+      "version": "6",
+      "when": 1792784510522,
+      "tag": "0011_lastfm",
+      "breakpoints": true
+    },
+    {
+      "idx": 12,
+      "version": "6",
+      "when": 1792785379603,
+      "tag": "0012_lastfm_username",
+      "breakpoints": true
     }
   ]
 }

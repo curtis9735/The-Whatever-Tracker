@@ -1,4 +1,5 @@
 import { asc, eq, inArray } from 'drizzle-orm';
+import { getLastfmAccount } from '$lib/server/services/lastfm-sync';
 import { db, rawDb, schema } from '$lib/server/db';
 import { APP_VERSION } from '$lib/server/config';
 import type { Image, ItemLog } from '$lib/server/db/schema';
@@ -116,6 +117,8 @@ export const GET: RequestHandler = async ({ locals }) => {
 		.where(eq(schema.tags.userId, userId))
 		.all();
 	const sharedWithMe = sharedProgress(userId, logs, episodes, images);
+	// Only the connection itself; the plays are in the logs (and last.fm still has them all)
+	const lastfm = getLastfmAccount(userId);
 
 	const body = JSON.stringify(
 		{
@@ -136,6 +139,9 @@ export const GET: RequestHandler = async ({ locals }) => {
 					(im) => im.itemId === i.id || logs.some((l) => l.id === im.logId && l.itemId === i.id)
 				)
 			})),
+			...(lastfm
+				? { lastfm: { username: lastfm.username, connectedAt: new Date(lastfm.connectedAt).toISOString() } }
+				: {}),
 			sharedWithMe
 		},
 		null,

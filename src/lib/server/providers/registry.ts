@@ -1,10 +1,11 @@
 import { bgg } from './bgg';
 import { igdb } from './igdb';
+import { lastfm } from './lastfm';
 import { musicbrainz } from './musicbrainz';
 import { tmdb } from './tmdb';
 import type { Provider } from './types';
 
-export const PROVIDERS: Provider[] = [tmdb, igdb, bgg, musicbrainz];
+export const PROVIDERS: Provider[] = [tmdb, igdb, bgg, musicbrainz, lastfm];
 
 const BY_ID = new Map(PROVIDERS.map((p) => [p.id, p]));
 

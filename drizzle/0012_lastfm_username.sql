@@ -1,0 +1,1 @@
+ALTER TABLE `lastfm_albums` ADD `username` text;

@@ -7,6 +7,17 @@
 	// Spreadsheets only go into the user's own lists (not ones shared with them)
 	const ownLists = $derived(data.categories.filter((c) => c.access === 'owner'));
 
+	const lastfm = $derived(data.lastfm.account);
+
+	/** "12 min ago", "3 h ago", "2 d ago" */
+	function ago(ms: number) {
+		const min = Math.max(0, Math.round((Date.now() - ms) / 60_000));
+		if (min < 1) return 'just now';
+		if (min < 60) return `${min} min ago`;
+		if (min < 60 * 24) return `${Math.round(min / 60)} h ago`;
+		return `${Math.round(min / 1440)} d ago`;
+	}
+
 	function size(n: number) {
 		return n > 1e6 ? `${(n / 1e6).toFixed(1)} MB` : `${Math.round(n / 1e3)} KB`;
 	}
@@ -109,6 +120,33 @@
 				/>
 			{/each}
 		</ul>
+	</section>
+
+	<section class="card p-4 sm:p-5">
+		<h2 class="mb-1 font-semibold">Your last.fm</h2>
+		{#if lastfm}
+			<p class="mb-3 text-sm text-muted">
+				Connected as <strong>{lastfm.username}</strong>{' · '}{lastfm.state === 'importing'
+					? `Importing${lastfm.percent !== null ? ` ${lastfm.percent}%` : ''}`
+					: lastfm.lastSyncAt
+						? `Last synced ${ago(lastfm.lastSyncAt)}`
+						: 'Waiting for the first sync'}
+			</p>
+			<a class="btn" href="/settings/lastfm"><Icon name="music" size={16} /> Manage</a>
+		{:else if data.lastfm.ready}
+			<p class="mb-3 text-sm text-muted">
+				Bring in everything you've listened to on last.fm: every album becomes part of a list, each listening
+				day a log in your Journal.
+			</p>
+			<a class="btn" href="/settings/lastfm"><Icon name="music" size={16} /> Connect last.fm</a>
+		{:else}
+			<p class="text-sm text-muted">
+				Bring in everything you've listened to on last.fm. An admin needs to add a last.fm API key first.
+				{#if data.user.isAdmin}
+					<a class="text-accent underline" href="#integrations">Add it under Integrations.</a>
+				{/if}
+			</p>
+		{/if}
 	</section>
 
 	<section class="card p-4 sm:p-5">
