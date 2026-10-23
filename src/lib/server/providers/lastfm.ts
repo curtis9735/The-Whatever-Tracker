@@ -337,6 +337,7 @@ export function normalizeLfmArtist(artist: LfmArtistInfo, image?: string | null)
 		title: name,
 		subtitle: listeners ? `${count(listeners)} listeners` : undefined,
 		description: cleanWiki(artist.bio?.summary),
+		mbid: str(artist.mbid) || undefined,
 		imageUrl: image ?? undefined,
 		url: artist.url || undefined,
 		genres: tagsToGenres(artist.tags),

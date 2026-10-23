@@ -107,7 +107,7 @@ export const TEMPLATES: CategoryTemplate[] = [
 			{ key: 'want', label: 'Want to see', group: 'planned' },
 			{ key: 'seen', label: 'Seen', group: 'done' }
 		],
-		providerKinds: ['musicbrainz:artist', 'setlistfm:setlist'],
+		providerKinds: ['lastfm:artist', 'setlistfm:setlist'],
 		fields: [
 			{ key: 'with', label: 'Went with', type: 'text', scope: 'log' },
 			{ key: 'opener', label: 'Opening act', type: 'text', scope: 'log' }
@@ -119,13 +119,13 @@ export const TEMPLATES: CategoryTemplate[] = [
 		icon: '💿',
 		color: 'teal',
 		description:
-			'Albums and EPs with cover art, from last.fm and MusicBrainz. Connect last.fm in Settings to fill it with everything you’ve listened to.',
+			'Albums and EPs with cover art, from last.fm. Connect last.fm in Settings to fill it with everything you’ve listened to.',
 		statuses: [
 			{ key: 'to-listen', label: 'To listen', group: 'planned' },
 			{ key: 'listened', label: 'Listened', group: 'done' },
 			{ key: 'owned', label: 'Owned', group: 'active' }
 		],
-		providerKinds: ['lastfm:album', 'musicbrainz:album'],
+		providerKinds: ['lastfm:album'],
 		fields: [
 			{ key: 'format', label: 'Format', type: 'select', options: ['Vinyl', 'CD', 'Digital', 'Cassette'] }
 		]

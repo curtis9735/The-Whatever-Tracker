@@ -16,6 +16,7 @@ export function metadataToStore(d: NormalizedMetadata) {
 	return {
 		year: d.year ?? null,
 		...(d.artist ? { artist: d.artist } : {}),
+		...(d.mbid ? { mbid: d.mbid } : {}),
 		genres: d.genres ?? [],
 		facts: d.facts,
 		url: d.url ?? null,

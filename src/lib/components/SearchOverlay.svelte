@@ -48,6 +48,11 @@
 	const groups = $derived(
 		KINDS.filter((k) => searchKinds.includes(k.key)).map((k) => ({
 			...k,
+			// A hidden (MusicBrainz) group next to its last.fm twin gets a neutral title
+			group:
+				k.hidden && searchKinds.includes('lastfm:' + k.key.split(':')[1])
+					? `More ${k.group.toLowerCase()}`
+					: k.group,
 			items: results.filter((r) => r.kindKey === k.key),
 			state: external[k.provider]
 		}))

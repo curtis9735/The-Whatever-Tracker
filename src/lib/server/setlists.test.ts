@@ -281,6 +281,18 @@ describe('which lists look up setlists', () => {
 		expect(setlistArtist(linked as never)).toEqual({ mbid: 'b8a7c51f-362c-4dcb-a259-bc6e0095f0a6' });
 	});
 
+	it('last.fm artists: exact when last.fm gave an MBID, otherwise by name', () => {
+		const lfm = { ...base, provider: 'lastfm', providerKind: 'artist', providerId: 'lastfm:ed sheeran' };
+		expect(
+			setlistArtist({ ...lfm, metadata: { mbid: 'b8a7c51f-362c-4dcb-a259-bc6e0095f0a6' } } as never)
+		).toEqual({
+			mbid: 'b8a7c51f-362c-4dcb-a259-bc6e0095f0a6'
+		});
+		expect(setlistArtist({ ...lfm, metadata: { genres: [] } } as never)).toEqual({ name: 'Ed Sheeran' });
+		expect(setlistArtist({ ...lfm, metadata: null } as never)).toEqual({ name: 'Ed Sheeran' });
+		expect(listUsesSetlists({ providerKinds: ['lastfm:artist', 'setlistfm:setlist'] })).toBe(true);
+	});
+
 	it('the upgrade turns it on for existing concert lists only (and only once)', () => {
 		const sqlite = rawDb();
 		const user = sqlite

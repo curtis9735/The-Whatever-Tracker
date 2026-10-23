@@ -349,7 +349,7 @@
 				<fieldset>
 					<legend class="sr-only">What this list holds</legend>
 					<div class="grid gap-2 sm:grid-cols-2">
-						{#each data.kinds as k (k.key)}
+						{#each data.kinds.filter((k) => !k.hidden) as k (k.key)}
 							{@render choice(k.key, k.icon, k.label, k.provider, k.gives, k.enabled)}
 						{/each}
 					</div>

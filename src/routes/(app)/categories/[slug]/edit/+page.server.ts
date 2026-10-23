@@ -20,7 +20,7 @@ import {
 } from '$lib/server/services/access';
 import { enabledKinds } from '$lib/server/providers/registry';
 import { setlistfmEnabled } from '$lib/server/providers/setlistfm';
-import { CATEGORY_COLORS, KINDS, LOG_SOURCES } from '$lib/kinds';
+import { CATEGORY_COLORS, KINDS, LOG_SOURCES, keepHiddenKinds } from '$lib/kinds';
 import { cleanIcon } from '$lib/icons';
 import { FIELD_TYPES, slugify } from '$lib/fields';
 import type { FieldType, ShareRole } from '$lib/types';
@@ -124,10 +124,13 @@ export const actions: Actions = {
 		});
 
 		const validKinds = new Set<string>([...KINDS.map((k) => k.key), ...LOG_SOURCES.map((s) => s.key)]);
-		const providerKinds = form
-			.getAll('providerKinds')
-			.map(String)
-			.filter((k) => validKinds.has(k));
+		const providerKinds = keepHiddenKinds(
+			form
+				.getAll('providerKinds')
+				.map(String)
+				.filter((k) => validKinds.has(k)),
+			category.providerKinds
+		);
 		// Extras (setlists…) only go with the kind of list they belong to
 		for (const s of LOG_SOURCES) {
 			if (!s.forKinds.some((k) => providerKinds.includes(k))) {

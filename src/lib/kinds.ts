@@ -11,6 +11,8 @@ export interface KindInfo {
 	/** Search result group title */
 	group: string;
 	order: number;
+	/** Not offered when picking sources, but lists that already have it keep working */
+	hidden?: boolean;
 }
 
 export const KINDS: KindInfo[] = [
@@ -57,7 +59,8 @@ export const KINDS: KindInfo[] = [
 		icon: '🎤',
 		gives: 'Photo, where they’re from, genres and website',
 		group: 'Artists',
-		order: 5
+		order: 5,
+		hidden: true
 	},
 	{
 		key: 'musicbrainz:album',
@@ -66,12 +69,13 @@ export const KINDS: KindInfo[] = [
 		icon: '💿',
 		gives: 'Cover art, artist and release date',
 		group: 'Albums',
-		order: 6
+		order: 6,
+		hidden: true
 	},
 	{
 		key: 'lastfm:album',
 		provider: 'lastfm',
-		label: 'Albums (last.fm)',
+		label: 'Albums',
 		icon: '💿',
 		gives: 'Cover art, genres, a short description, listeners and plays',
 		group: 'Albums',
@@ -80,7 +84,7 @@ export const KINDS: KindInfo[] = [
 	{
 		key: 'lastfm:artist',
 		provider: 'lastfm',
-		label: 'Music artists (last.fm)',
+		label: 'Music artists',
 		icon: '🎤',
 		gives: 'Photo, genres, a short bio, listeners and plays',
 		group: 'Artists',
@@ -90,6 +94,16 @@ export const KINDS: KindInfo[] = [
 
 /** Kinds whose lists hold albums (listening history from last.fm is matched against these) */
 export const ALBUM_KINDS = ['lastfm:album', 'musicbrainz:album'];
+
+/**
+ * What to save as a list's sources: the ticked ones, plus any hidden kind the list already had
+ * (hidden kinds have no card, so they are never in the submitted form).
+ */
+export function keepHiddenKinds(submitted: string[], existing: string[]) {
+	const hidden = new Set(KINDS.filter((k) => k.hidden).map((k) => k.key));
+	const kept = existing.filter((k) => hidden.has(k) && !submitted.includes(k));
+	return [...submitted, ...kept];
+}
 
 export const KIND_BY_KEY = new Map(KINDS.map((k) => [k.key, k]));
 
@@ -104,7 +118,7 @@ export const LOG_SOURCES = [
 		label: 'Concert setlists',
 		gives: 'Each show you log gets its venue, tour and songs, found by artist and date',
 		/** Offered for lists of these (or already turned on) */
-		forKinds: ['musicbrainz:artist']
+		forKinds: ['musicbrainz:artist', 'lastfm:artist']
 	}
 ] as const;
 

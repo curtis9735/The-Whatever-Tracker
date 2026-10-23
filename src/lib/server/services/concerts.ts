@@ -13,10 +13,17 @@ export function canFindSetlists(_item: Item, category: Category) {
 	return setlistfmEnabled() && listUsesSetlists(category);
 }
 
-/** Exact MusicBrainz match when we have one; otherwise search setlist.fm by the item's name. */
+/**
+ * Exact MusicBrainz ID when we have one (a MusicBrainz artist, or a last.fm artist that came
+ * with one); otherwise search setlist.fm by the item's name.
+ */
 export function setlistArtist(item: Item): SetlistQuery['artist'] {
 	if (item.provider === 'musicbrainz' && item.providerKind === 'artist' && item.providerId) {
 		return { mbid: item.providerId };
+	}
+	if (item.provider === 'lastfm' && item.providerKind === 'artist') {
+		const mbid = (item.metadata as { mbid?: unknown } | null)?.mbid;
+		if (typeof mbid === 'string' && mbid) return { mbid };
 	}
 	return { name: item.title };
 }

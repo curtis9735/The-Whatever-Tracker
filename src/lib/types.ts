@@ -58,6 +58,8 @@ export interface NormalizedMetadata extends SearchResult {
 	largeImageUrl?: string;
 	/** Who made it, for albums (kept in the item's metadata so albums can be matched by artist) */
 	artist?: string;
+	/** MusicBrainz ID, when the source gave one (last.fm artists), kept so setlist.fm can find them exactly */
+	mbid?: string;
 }
 
 export interface LocalSearchHit {
