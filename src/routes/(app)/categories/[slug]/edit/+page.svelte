@@ -190,6 +190,74 @@
 	/** For the delete card: "The person" or "The 3 people" the list is shared with */
 	const sharedPeople = (n: number) => (n === 1 ? 'The person' : `The ${n} people`);
 
+	// --- Share with a link: people without an account, read-only ----------------------------------
+	// Kept here (not reloaded with the page) so turning it on or off never discards unsaved edits above
+	// svelte-ignore state_referenced_locally
+	let link = $state(data.shareLink);
+	$effect(() => {
+		link = data.shareLink;
+	});
+	let linkBusy = $state(false);
+	let copied = $state(false);
+	let linkInput = $state<HTMLInputElement>();
+	let expiryChoice = $state('none');
+	let expiryDate = $state('');
+	/** YYYY-MM-DD in the browser's time zone */
+	const localDate = (ms: number) => {
+		const d = new Date(ms);
+		return `${d.getFullYear()}-${String(d.getMonth() + 1).padStart(2, '0')}-${String(d.getDate()).padStart(2, '0')}`;
+	};
+	$effect(() => {
+		expiryChoice = link?.expiresAt ? 'custom' : 'none';
+		expiryDate = link?.expiresAt ? localDate(link.expiresAt) : '';
+	});
+	const when = (ms: number) => new Date(ms).toLocaleDateString(undefined, { dateStyle: 'medium' });
+	const views = $derived(
+		link
+			? link.viewCount === 0
+				? 'Not opened yet'
+				: `${link.viewCount === 1 ? '1 view' : `${link.viewCount} views`}${link.lastViewedAt ? ` · last ${when(link.lastViewedAt)}` : ''}`
+			: ''
+	);
+	async function copyLink() {
+		if (!link) return;
+		try {
+			await navigator.clipboard.writeText(link.url);
+		} catch {
+			linkInput?.select();
+			document.execCommand('copy');
+		}
+		copied = true;
+		setTimeout(() => (copied = false), 2000);
+	}
+	/** Runs a link action in place and takes the new state from its answer */
+	const linkAction: import('@sveltejs/kit').SubmitFunction = ({ cancel, action }) => {
+		if (
+			action.search === '?/shareOn' &&
+			link &&
+			!confirm('Make a new link? The old one stops working for everyone who has it.')
+		) {
+			cancel();
+			return;
+		}
+		if (
+			action.search === '?/shareOff' &&
+			!confirm('Turn the link off? Anyone using it will no longer see this list.')
+		) {
+			cancel();
+			return;
+		}
+		linkBusy = true;
+		return async ({ result, update }) => {
+			if (result.type === 'success' && result.data && 'share' in result.data) {
+				link = result.data.share as typeof link;
+				copied = false;
+			}
+			await update({ reset: false, invalidateAll: false });
+			linkBusy = false;
+		};
+	};
+
 	// --- Someone the list is shared with: only their own choices ------------------------------
 	let savingMine = $state(false);
 	const title = $derived(member ? `Your settings for ${c.name}` : `Edit ${c.name}`);
@@ -631,6 +699,91 @@
 				</div>
 			</div>
 		</form>
+
+		<!-- Share with a link -->
+		<section class="card space-y-4 p-4 sm:p-5">
+			<div>
+				<h2 class="font-semibold">Share with a link</h2>
+				<p class="mt-1 text-sm text-muted">
+					Anyone with the link can see this list, its notes, places and prices, without an account. They can't
+					change anything.
+				</p>
+			</div>
+			{#if form?.shareMessage}<p class="error-box" role="alert">{form.shareMessage}</p>{/if}
+			{#if !link}
+				<form method="POST" action="?/shareOn" use:enhance={linkAction}>
+					<button class="btn btn-primary" disabled={linkBusy}>
+						<Icon name="link" size={16} /> Create link
+					</button>
+				</form>
+			{:else}
+				{#if link.expired}
+					<p class="error-box">
+						This link has expired and shows nothing. Set a new date below, or make a new link.
+					</p>
+				{/if}
+				<div class="flex gap-2">
+					<input
+						class="input min-w-0 flex-1"
+						readonly
+						value={link.url}
+						aria-label="Share link"
+						bind:this={linkInput}
+						onfocus={() => linkInput?.select()}
+					/>
+					<button type="button" class="btn" onclick={copyLink}>
+						<Icon name={copied ? 'check' : 'link'} size={16} />
+						{copied ? 'Copied' : 'Copy'}
+					</button>
+				</div>
+				<p class="text-xs text-muted">
+					{`Created ${when(link.createdAt)} · ${views}`}
+				</p>
+
+				<form
+					method="POST"
+					action="?/shareExpiry"
+					class="flex flex-wrap items-end gap-2"
+					use:enhance={linkAction}
+				>
+					<div>
+						<label class="label" for="share-expiry">Expires</label>
+						<select class="input w-auto" id="share-expiry" name="expiry" bind:value={expiryChoice}>
+							<option value="none">Never</option>
+							<option value="7">In 7 days</option>
+							<option value="30">In 30 days</option>
+							<option value="custom">On a date…</option>
+						</select>
+					</div>
+					{#if expiryChoice === 'custom'}
+						<div>
+							<label class="label" for="share-expiry-date">Last day</label>
+							<input
+								class="input w-auto"
+								id="share-expiry-date"
+								name="expiry_date"
+								type="date"
+								min={localDate(Date.now())}
+								bind:value={expiryDate}
+							/>
+						</div>
+					{/if}
+					<button class="btn" disabled={linkBusy}>Set expiry</button>
+					{#if link.expiresAt && !link.expired}
+						<span class="pb-2 text-sm text-muted">{`Works until the end of ${when(link.expiresAt)}`}</span>
+					{/if}
+				</form>
+
+				<div class="flex flex-wrap gap-2">
+					<form method="POST" action="?/shareOn" use:enhance={linkAction}>
+						<button class="btn" disabled={linkBusy}><Icon name="refresh" size={16} /> Make a new link</button>
+					</form>
+					<form method="POST" action="?/shareOff" use:enhance={linkAction}>
+						<button class="btn btn-danger" disabled={linkBusy}>Turn off</button>
+					</form>
+				</div>
+			{/if}
+		</section>
 
 		<!-- Danger zone -->
 		<section class="card border-danger/40 p-4 sm:p-5">

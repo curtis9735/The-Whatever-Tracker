@@ -32,7 +32,8 @@ export const init: ServerInit = async () => {
 	console.log(`[startup] data directory: ${c.dataDir}`);
 };
 
-const PUBLIC_PATHS = ['/login', '/setup', '/api/health'];
+// /s/ is the read-only share links: the secret in the address is the only thing that opens them
+const PUBLIC_PATHS = ['/login', '/setup', '/api/health', '/s'];
 
 export const handle: Handle = async ({ event, resolve }) => {
 	const token = event.cookies.get(SESSION_COOKIE) ?? null;
@@ -68,6 +69,13 @@ export const handle: Handle = async ({ event, resolve }) => {
 	// Served over HTTPS (ORIGIN is https://…): browsers should never fall back to plain HTTP
 	if (event.url.protocol === 'https:') {
 		response.headers.set('Strict-Transport-Security', 'max-age=31536000');
+	}
+	if (p.startsWith('/s/')) {
+		// Shared lists stay out of search engines and never leak their address (the secret) to other sites
+		response.headers.set('X-Robots-Tag', 'noindex, nofollow');
+		response.headers.set('Referrer-Policy', 'no-referrer');
+		// Pages are never cached; the image route sets its own
+		if (!response.headers.has('Cache-Control')) response.headers.set('Cache-Control', 'private, no-store');
 	}
 	return response;
 };

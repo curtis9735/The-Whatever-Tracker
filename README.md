@@ -100,8 +100,8 @@ Back up the whole folder with **Hyper Backup**. To restore, stop the stack, repl
 ### Security
 
 Every page, API call and photo needs a signed-in session. The only things that answer without one are the
-login page, the one-time setup page (which closes for good once the first account exists) and a bare health
-check.
+login page, the one-time setup page (which closes for good once the first account exists), a bare health
+check and, if you turn them on, the read-only share links under `/s/` (see below).
 
 - **Sessions:** random 192-bit tokens, stored only as hashes, in a cookie that is HttpOnly, Secure (over
   HTTPS) and SameSite=Lax. Logging out or changing your password ends them.
@@ -117,6 +117,12 @@ check.
 - **Other sites can't act for you:** form posts from another site are rejected, and so are form posts with no
   origin at all. Pages can't be framed by other sites, and a strict Content-Security-Policy limits what
   scripts can run.
+- **Share links** (`/s/<secret>`): the long random address is the only secret, so anyone who has it sees
+  that one list, read-only, with no sign-in. Turn the link off (or make a new one) in the list's settings and
+  the old address stops working at once; links can also expire. A link that is off, expired or never existed
+  gives the same "not found" page. Nothing else is reachable through it, and only the list's owner can manage
+  it. If your reverse proxy only forwards some paths, remember `/s/` is what makes the links reachable from
+  the internet; block it there if you never want that.
 - **Household members** only ever see their own lists and photos. Account management and API keys are
   admin-only.
 
@@ -196,6 +202,19 @@ list has **TV shows** ticked.
     day, new places and artists, your highest rated log).
   - **Which years:** every year you have anything in; the current one is labelled "so far". Only your own
     activity counts, on lists you can still see, and a day of last.fm listening counts once.
+- **Share links:** **List settings → Share with a link** shows one list to friends who have no account, read-only.
+  - **What they see:** the list's items with covers, statuses, ratings and notes, plus each item's page with its
+    history (dates, ratings, places, prices, notes, log fields and setlists), custom fields and tags. Planned
+    items (Wishlist, Want to see…) sit in their own section below. They see _your_ status, ratings and logs;
+    other household members' progress and logs are never included, and listening imported from last.fm is shown
+    as a play count, not listed. Only the newest 50 logs of an item are shown.
+  - **The link:** **Create link**, then **Copy**. It is a long random address (`/s/…`) that only you, the list's
+    owner, can create or change. **Make a new link** replaces it (the old one stops working at once), **Turn
+    off** removes it, and **Expires** can end it in 7 or 30 days or after a date you pick. The settings page
+    shows how many times it was opened and when last.
+  - **Good to know:** anyone with the link can see the list, its notes, places and prices, so only send it to
+    people you trust. They can't change anything, the pages ask search engines not to list them, and the
+    address isn't passed on to other sites.
 - **Calendar:** **Calendar** in the sidebar (or **Coming up this week** on the home page) shows upcoming
   releases for the shows, movies and games in your lists.
   - **What's on it:** TV episode air dates and movie release dates come from TMDB; game release dates come

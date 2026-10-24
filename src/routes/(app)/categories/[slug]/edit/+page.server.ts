@@ -1,6 +1,7 @@
 import { fail, redirect } from '@sveltejs/kit';
 import { eq } from 'drizzle-orm';
 import { z } from 'zod';
+import { env } from '$env/dynamic/private';
 import { db, schema } from '$lib/server/db';
 import {
 	categoryItemCount,
@@ -18,6 +19,13 @@ import {
 	saveShares,
 	setMyListSettings
 } from '$lib/server/services/access';
+import {
+	createShareLink,
+	getShareLink,
+	parseExpiry,
+	setShareExpiry,
+	turnOffShareLink
+} from '$lib/server/services/share-links';
 import { enabledKinds } from '$lib/server/providers/registry';
 import { setlistfmEnabled } from '$lib/server/providers/setlistfm';
 import { CATEGORY_COLORS, KINDS, LOG_SOURCES, keepHiddenKinds } from '$lib/kinds';
@@ -59,6 +67,7 @@ export const load: PageServerLoad = async ({ locals, params, url }) => {
 	const owner = cat.category.access === 'owner';
 	const enabled = enabledKinds();
 	const roles = new Map<number, ShareRole>();
+	const link = owner ? shareLinkView(userId, cat.category.id, url) : null;
 	if (owner) for (const s of listSharesOf(cat.category.id)) roles.set(s.id, s.role);
 	return {
 		...cat,
@@ -66,6 +75,8 @@ export const load: PageServerLoad = async ({ locals, params, url }) => {
 		people: owner
 			? householdMembers(userId).map((p) => ({ ...p, role: roles.get(p.id) ?? ('none' as const) }))
 			: [],
+		/** The list's link for people without an account (the owner's page only) */
+		shareLink: link,
 		itemCount: categoryItemCount(cat.category.id),
 		kinds: KINDS.map((k) => ({ ...k, enabled: enabled.has(k.key) })),
 		logSources: LOG_SOURCES.map((s) => ({ ...s, enabled: setlistfmEnabled() })),
@@ -73,6 +84,14 @@ export const load: PageServerLoad = async ({ locals, params, url }) => {
 		isNew: url.searchParams.get('new') === '1'
 	};
 };
+
+/** The link as the settings page shows it, with the address friends open: ORIGIN when it's set */
+function shareLinkView(userId: number, categoryId: number, url: URL) {
+	const link = getShareLink(userId, categoryId);
+	if (!link) return null;
+	const { token, ...rest } = link;
+	return { ...rest, url: `${(env.ORIGIN || url.origin).replace(/\/+$/, '')}/s/${token}` };
+}
 
 function ownedCategory(userId: number, slug: string) {
 	return getCategoryBySlug(userId, slug, 'owner').category;
@@ -209,6 +228,30 @@ export const actions: Actions = {
 		}
 		deleteCategory(userId, category.id);
 		redirect(303, '/categories');
+	},
+
+	/** The link for people without an account: turned on, or replaced by a new one (the old one stops working) */
+	shareOn: async ({ locals, params, url }) => {
+		const userId = locals.user!.id;
+		const category = ownedCategory(userId, params.slug);
+		createShareLink(userId, category.id);
+		return { share: shareLinkView(userId, category.id, url) };
+	},
+
+	shareOff: async ({ locals, params }) => {
+		const userId = locals.user!.id;
+		turnOffShareLink(userId, ownedCategory(userId, params.slug).id);
+		return { share: null };
+	},
+
+	shareExpiry: async ({ request, locals, params, url }) => {
+		const userId = locals.user!.id;
+		const category = ownedCategory(userId, params.slug);
+		const form = await request.formData();
+		const expiresAt = parseExpiry(String(form.get('expiry') ?? ''), String(form.get('expiry_date') ?? ''));
+		if (expiresAt === 'invalid') return fail(400, { shareMessage: 'Pick a day that is still to come.' });
+		setShareExpiry(userId, category.id, expiresAt);
+		return { share: shareLinkView(userId, category.id, url) };
 	},
 
 	/** Someone the list is shared with: their own Up next and Calendar choices for it */

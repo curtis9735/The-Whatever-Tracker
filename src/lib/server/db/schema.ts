@@ -490,6 +490,37 @@ export const lastfmScrobbles = sqliteTable(
 	]
 );
 
+/**
+ * A secret link that shows one list, read-only, to people without an account. The token is the only
+ * secret; a link that is revoked, expired or unknown is treated the same way (not found).
+ */
+export const shareLinks = sqliteTable(
+	'share_links',
+	{
+		id: integer('id').primaryKey({ autoIncrement: true }),
+		categoryId: integer('category_id')
+			.notNull()
+			.references(() => categories.id, { onDelete: 'cascade' }),
+		createdBy: integer('created_by')
+			.notNull()
+			.references(() => users.id, { onDelete: 'cascade' }),
+		/** 32 random bytes, base64url */
+		token: text('token').notNull(),
+		createdAt: createdAt(),
+		expiresAt: integer('expires_at', { mode: 'timestamp_ms' }),
+		revokedAt: integer('revoked_at', { mode: 'timestamp_ms' }),
+		lastViewedAt: integer('last_viewed_at', { mode: 'timestamp_ms' }),
+		viewCount: integer('view_count').notNull().default(0)
+	},
+	(t) => [
+		uniqueIndex('share_links_token_idx').on(t.token),
+		// At most one active link per list: making a new one revokes the old
+		uniqueIndex('share_links_active_idx')
+			.on(t.categoryId)
+			.where(sql`revoked_at IS NULL`)
+	]
+);
+
 /** App-wide settings edited in the UI (e.g. API keys). Values here override the stack's env vars. */
 export const appSettings = sqliteTable('app_settings', {
 	key: text('key').primaryKey(),
@@ -518,3 +549,4 @@ export type ItemProgress = typeof itemProgress.$inferSelect;
 export type Checkin = typeof checkins.$inferSelect;
 export type LastfmAccount = typeof lastfmAccounts.$inferSelect;
 export type LastfmAlbum = typeof lastfmAlbums.$inferSelect;
+export type ShareLink = typeof shareLinks.$inferSelect;
