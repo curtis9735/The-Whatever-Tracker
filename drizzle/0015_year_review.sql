@@ -1,0 +1,1 @@
+CREATE INDEX `lastfm_scrobbles_user_date_idx` ON `lastfm_scrobbles` (`user_id`,`date`,`album_id`,`track_key`);

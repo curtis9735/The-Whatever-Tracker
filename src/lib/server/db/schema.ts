@@ -484,7 +484,9 @@ export const lastfmScrobbles = sqliteTable(
 	},
 	(t) => [
 		primaryKey({ columns: [t.userId, t.uts, t.trackKey] }),
-		index('lastfm_scrobbles_album_date_idx').on(t.albumId, t.date)
+		index('lastfm_scrobbles_album_date_idx').on(t.albumId, t.date),
+		// A year's plays (Year in review) are read by date, covering: the primary key is by time, not local day
+		index('lastfm_scrobbles_user_date_idx').on(t.userId, t.date, t.albumId, t.trackKey)
 	]
 );
 

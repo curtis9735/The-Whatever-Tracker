@@ -49,6 +49,9 @@
 			<a href="/calendar" class="nav-link" class:nav-active={isActive('/calendar')}
 				><Icon name="calendar" size={18} /> Calendar</a
 			>
+			<a href="/year" class="nav-link" class:nav-active={isActive('/year')}
+				><Icon name="sparkles" size={18} /> Year in review</a
+			>
 			<button class="nav-link w-full" onclick={() => (searchUi.open = true)}>
 				<Icon name="search" size={18} /> Search
 				<kbd class="ml-auto rounded border border-border px-1.5 text-[10px] text-muted">Ctrl K</kbd>

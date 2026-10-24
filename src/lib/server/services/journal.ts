@@ -63,7 +63,7 @@ export interface JournalLog {
  */
 
 /** The ids of the lists the viewer sees (their own, and shared with them), narrowed to one when asked, as JSON */
-function visibleLists(userId: number, categoryId: number | null): string {
+export function visibleLists(userId: number, categoryId: number | null): string {
 	const ids = (
 		rawDb()
 			.prepare(
@@ -76,7 +76,7 @@ function visibleLists(userId: number, categoryId: number | null): string {
 }
 
 /** The item of log `l` is on a list in the bound JSON array of list ids (needs `items i`) */
-const IN_LISTS = 'i.category_id IN (SELECT value FROM json_each(?))';
+export const IN_LISTS = 'i.category_id IN (SELECT value FROM json_each(?))';
 
 /** First and last day anything was logged (for "All Time"). */
 export function logBounds(userId: number, categoryId: number | null) {

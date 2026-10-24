@@ -65,9 +65,12 @@
 <svelte:head><title>Journal · The Whatever Tracker</title></svelte:head>
 
 <div class="space-y-6">
-	<div>
-		<h1 class="text-2xl font-semibold tracking-tight">Journal</h1>
-		<p class="text-sm text-muted">Everything you've logged, day by day.</p>
+	<div class="flex flex-wrap items-start justify-between gap-3">
+		<div>
+			<h1 class="text-2xl font-semibold tracking-tight">Journal</h1>
+			<p class="text-sm text-muted">Everything you've logged, day by day.</p>
+		</div>
+		<a href="/year" class="btn btn-sm"><Icon name="sparkles" size={14} /> Year in review</a>
 	</div>
 
 	<div class="flex flex-wrap items-center gap-2">

@@ -188,6 +188,14 @@ list has **TV shows** ticked.
   - **Stats:** how much you logged and on how many days, your busiest day of the week, and your current and
     longest streak.
   - **Activity history:** a calendar heatmap; click any day to see just that day.
+- **Year in review:** **Year in review** in the sidebar (or on the Journal page, and on the home page in
+  December and January) tells the story of a year in one long page you can scroll and screenshot.
+  - **What's in it:** your numbers (things logged, active days, new items) and a month-by-month chart, then a
+    section for every list with its top rated and most logged items, Watching (movies, episodes and about how
+    many hours), Music from last.fm (top albums, artists and tracks) and Highlights (longest streak, busiest
+    day, new places and artists, your highest rated log).
+  - **Which years:** every year you have anything in; the current one is labelled "so far". Only your own
+    activity counts, on lists you can still see, and a day of last.fm listening counts once.
 - **Calendar:** **Calendar** in the sidebar (or **Coming up this week** on the home page) shows upcoming
   releases for the shows, movies and games in your lists.
   - **What's on it:** TV episode air dates and movie release dates come from TMDB; game release dates come

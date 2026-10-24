@@ -73,6 +73,21 @@
 	</section>
 {/if}
 
+{#if data.reviewYear}
+	<a
+		href="/year/{data.reviewYear}"
+		class="card mb-8 flex items-center gap-3 p-4 hover:border-accent"
+		style="background: linear-gradient(135deg, color-mix(in srgb, var(--accent) 18%, var(--surface)), var(--surface))"
+	>
+		<span class="text-3xl" aria-hidden="true">✨</span>
+		<span class="min-w-0 flex-1">
+			<span class="block font-semibold">Your {data.reviewYear} in review</span>
+			<span class="block text-sm text-muted">See your year in lists, watching and music.</span>
+		</span>
+		<Icon name="chevron-right" size={18} class="shrink-0 text-muted" />
+	</a>
+{/if}
+
 {#if data.comingUp.length}
 	<section class="mb-8">
 		<div class="mb-3 flex items-center justify-between gap-3">
