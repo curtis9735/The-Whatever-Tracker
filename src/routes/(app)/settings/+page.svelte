@@ -128,9 +128,11 @@
 			<p class="mb-3 text-sm text-muted">
 				Connected as <strong>{lastfm.username}</strong>{' · '}{lastfm.state === 'importing'
 					? `Importing${lastfm.percent !== null ? ` ${lastfm.percent}%` : ''}`
-					: lastfm.lastSyncAt
-						? `Last synced ${ago(lastfm.lastSyncAt)}`
-						: 'Waiting for the first sync'}
+					: lastfm.state === 'naming'
+						? `Filling in track names${lastfm.percent !== null ? ` ${lastfm.percent}%` : ''}`
+						: lastfm.lastSyncAt
+							? `Last synced ${ago(lastfm.lastSyncAt)}`
+							: 'Waiting for the first sync'}
 			</p>
 			<a class="btn" href="/settings/lastfm"><Icon name="music" size={16} /> Manage</a>
 		{:else if data.lastfm.ready}

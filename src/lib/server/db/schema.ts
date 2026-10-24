@@ -402,7 +402,7 @@ export const lastfmAccounts = sqliteTable('lastfm_accounts', {
 	/** Every play at or before this (unix seconds) is imported */
 	syncedUntil: integer('synced_until').notNull().default(0),
 	/** The running window: plays from jobFrom (exclusive) up to jobEnd, newest first, jobTo is the cursor */
-	job: text('job').$type<'backfill' | 'sync'>(),
+	job: text('job').$type<'backfill' | 'sync' | 'names'>(),
 	jobFrom: integer('job_from'),
 	jobTo: integer('job_to'),
 	jobEnd: integer('job_end'),
@@ -420,6 +420,8 @@ export const lastfmAccounts = sqliteTable('lastfm_accounts', {
 	/** Cached totals */
 	plays: integer('plays').notNull().default(0),
 	albums: integer('albums').notNull().default(0),
+	/** ms since the epoch: the one-time re-read that fills in readable track names finished (or wasn't needed) */
+	namesAt: integer('names_at'),
 	/** The slow "fill in album details" pass finished */
 	enrichedAt: integer('enriched_at', { mode: 'timestamp_ms' }),
 	connectedAt: createdAt()
@@ -476,7 +478,9 @@ export const lastfmScrobbles = sqliteTable(
 			.notNull()
 			.references(() => lastfmAlbums.id, { onDelete: 'cascade' }),
 		/** YYYY-MM-DD in the server's time zone */
-		date: text('date').notNull()
+		date: text('date').notNull(),
+		/** The track name as last.fm gave it; NULL for plays stored before names were kept */
+		track: text('track')
 	},
 	(t) => [
 		primaryKey({ columns: [t.userId, t.uts, t.trackKey] }),

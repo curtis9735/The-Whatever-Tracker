@@ -60,6 +60,13 @@ export interface NormalizedMetadata extends SearchResult {
 	artist?: string;
 	/** MusicBrainz ID, when the source gave one (last.fm artists), kept so setlist.fm can find them exactly */
 	mbid?: string;
+	/** Albums: the tracklist in order (empty when the source has none), `duration` in seconds */
+	tracks?: AlbumTrack[];
+}
+
+export interface AlbumTrack {
+	name: string;
+	duration: number | null;
 }
 
 export interface LocalSearchHit {

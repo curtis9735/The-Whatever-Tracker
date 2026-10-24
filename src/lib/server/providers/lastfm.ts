@@ -1,6 +1,6 @@
 import { keys, userAgent } from '../settings';
 import { lastfmAlbumId, lastfmArtistId, parseLastfmAlbumId, parseLastfmArtistId } from '../album-match';
-import type { NormalizedMetadata, SearchResult } from '$lib/types';
+import type { AlbumTrack, NormalizedMetadata, SearchResult } from '$lib/types';
 import type { Provider } from './types';
 import { artistImage } from './artist-images';
 import {
@@ -268,6 +268,21 @@ export function normalizeLfmArtistSearch(json: {
 	return out;
 }
 
+interface LfmTrack {
+	name?: string;
+	duration?: string | number;
+	'@attr'?: { rank?: string | number };
+}
+
+/** The tracklist in order (by last.fm's rank when it has one); tracks without a name are dropped */
+export function albumTracks(tracks: LfmTrack[]): AlbumTrack[] {
+	return tracks
+		.map((t, i) => ({ t, i, rank: num(t?.['@attr']?.rank) }))
+		.filter(({ t }) => str(t?.name).trim())
+		.sort((a, b) => (a.rank && b.rank ? a.rank - b.rank : 0) || a.i - b.i)
+		.map(({ t }) => ({ name: str(t.name).trim(), duration: num(t.duration) > 0 ? num(t.duration) : null }));
+}
+
 interface LfmAlbumInfo {
 	name?: string;
 	artist?: unknown;
@@ -276,7 +291,7 @@ interface LfmAlbumInfo {
 	listeners?: string | number;
 	playcount?: string | number;
 	tags?: unknown;
-	tracks?: { track?: { duration?: string | number }[] | { duration?: string | number } };
+	tracks?: { track?: LfmTrack[] | LfmTrack };
 	wiki?: { summary?: string };
 }
 
@@ -299,6 +314,7 @@ export function normalizeLfmAlbum(album: LfmAlbumInfo): NormalizedMetadata {
 		imageUrl: image,
 		largeImageUrl: image,
 		url: album.url || undefined,
+		tracks: albumTracks(tracks),
 		genres: tagsToGenres(album.tags),
 		facts: facts([
 			['Artist', artist],

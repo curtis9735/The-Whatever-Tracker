@@ -25,6 +25,8 @@ const { albumKey, lastfmAlbumId } = await import('./album-match');
 const { hasListeningLogs } = await import('./services/journal');
 const { env } = await import('$env/dynamic/private');
 const { GET: statusApi } = await import('../../routes/api/lastfm/status/+server');
+const tracksApi = await import('../../routes/(app)/items/[id]/tracks/+server');
+const trackSvc = await import('./services/tracks');
 
 setLastfmMinInterval(0);
 
@@ -533,7 +535,8 @@ describe('filling in album details', () => {
 	const settleOthers = () =>
 		rawDb()
 			.prepare(
-				`UPDATE items SET metadata = json_set(metadata, '$.enriched', json('true'))
+				`UPDATE items SET metadata = json_set(metadata, '$.enriched', json('true'),
+					'$.tracks', json(COALESCE(json_extract(metadata, '$.tracks'), '[]')))
 				 WHERE provider = 'lastfm' AND json_extract(metadata, '$.enriched') = 0`
 			)
 			.run();
@@ -1558,5 +1561,427 @@ describe('review fixes', () => {
 		sync.disconnectLastfm(s.importer.id);
 		expect(hasListeningLogs(s.importer.id)).toBe(true);
 		expect(hasListeningLogs(s.owner.id)).toBe(false);
+	});
+});
+
+// --- Track names, tracklists and the Tracks section ----------------------------------------------------
+
+describe('track names', () => {
+	const fmPlay = (uts: number, track: string, album = 'Record', artist = 'Band') => ({
+		uts,
+		artist,
+		album,
+		track
+	});
+	const names = (userId: number) =>
+		(
+			rawDb().prepare('SELECT track FROM lastfm_scrobbles WHERE user_id = ? ORDER BY uts').all(userId) as {
+				track: string | null;
+			}[]
+		).map((r) => r.track);
+	const unname = (userId: number) =>
+		rawDb().prepare('UPDATE lastfm_scrobbles SET track = NULL WHERE user_id = ?').run(userId);
+	const asScrobbles = (plays: Play[]) =>
+		plays.map((p) => ({
+			uts: p.uts,
+			artist: p.artist,
+			artistMbid: null,
+			album: p.album,
+			albumMbid: null,
+			track: p.track,
+			imageUrl: null
+		}));
+
+	it('stores the readable name of new plays', async () => {
+		const w = listener();
+		server.plays.set(w.lfm, [fmPlay(nowS() - 60, 'Café Song (Live)'), fmPlay(nowS() - 120, 'Two')]);
+		await connect(w);
+		await drain(w.user.id);
+		expect(names(w.user.id)).toEqual(['Two', 'Café Song (Live)']);
+		// A finished first import has nothing to fill in later
+		expect(account(w.user.id)!.namesAt).not.toBeNull();
+	});
+
+	it('fills a missing name when the play is seen again, without changing counts or logs', async () => {
+		const w = listener();
+		const plays = history(60, 5);
+		server.plays.set(w.lfm, plays);
+		await connect(w);
+		await drain(w.user.id);
+		const before = {
+			logs: logsOf(w.user.id),
+			plays: count('SELECT COUNT(*) AS n FROM lastfm_scrobbles'),
+			albums: count('SELECT COUNT(*) AS n FROM lastfm_albums')
+		};
+		unname(w.user.id);
+		expect(sync.applyScrobbles(w.user.id, asScrobbles(plays)).inserted).toBe(0);
+		expect(names(w.user.id).every((n) => n !== null)).toBe(true);
+		expect(count('SELECT COUNT(*) AS n FROM lastfm_scrobbles')).toBe(before.plays);
+		expect(count('SELECT COUNT(*) AS n FROM lastfm_albums')).toBe(before.albums);
+		expect(logsOf(w.user.id)).toEqual(before.logs);
+
+		// A name that is there stays as it was (the same track spelled in capitals folds to the same play)
+		const shouted = asScrobbles(plays).map((p) => ({ ...p, track: p.track.toUpperCase() }));
+		expect(sync.applyScrobbles(w.user.id, shouted).inserted).toBe(0);
+		expect(names(w.user.id)).not.toContain('TRACK 0');
+	});
+
+	describe('the one-time re-read', () => {
+		const upgraded = async (n = 450) => {
+			const w = listener();
+			server.plays.set(w.lfm, history(n));
+			await connect(w);
+			await drain(w.user.id);
+			// What an upgrade finds: plays without names, an account that never did the re-read
+			unname(w.user.id);
+			rawDb()
+				.prepare('UPDATE lastfm_accounts SET names_at = NULL, next_sync_at = 0 WHERE user_id = ?')
+				.run(w.user.id);
+			return w;
+		};
+
+		it('runs once: names everything, changes nothing else, then goes back to syncing', async () => {
+			const w = await upgraded();
+			const before = {
+				logs: logsOf(w.user.id),
+				plays: count('SELECT COUNT(*) AS n FROM lastfm_scrobbles'),
+				items: itemCount(w.list.id),
+				status: itemByTitle(w.list.id, 'Album 0')!.status,
+				acct: account(w.user.id)!
+			};
+			server.recent = [];
+			expect(await sync.runPage(w.user.id)).toBe('more');
+			expect(account(w.user.id)).toMatchObject({ job: 'names', jobFrom: 0 });
+			const view = sync.getLastfmAccount(w.user.id)!;
+			expect(view.state).toBe('naming');
+			expect(view.percent).toBe(44); // 200 of 450 plays
+			expect(view.plays).toBe(450);
+
+			// A restart in the middle: the cursor is in the database, nothing starts over
+			expect(await sync.runPage(w.user.id)).toBe('more');
+			expect(pages()).toHaveLength(2);
+			expect(await drain(w.user.id)).toBe('done');
+			expect(pages()).toHaveLength(3);
+			expect(pages().every((u) => !u.searchParams.has('from'))).toBe(true);
+
+			const after = account(w.user.id)!;
+			expect(after).toMatchObject({ job: null, plays: before.acct.plays, albums: before.acct.albums });
+			expect(after.namesAt).not.toBeNull();
+			expect(after.syncedUntil).toBe(before.acct.syncedUntil);
+			expect(after.backfilledAt).toEqual(before.acct.backfilledAt);
+			expect(after.lastSyncAt).toEqual(before.acct.lastSyncAt);
+			expect(after.errorCode).toBeNull();
+			expect(names(w.user.id).every((n) => n !== null)).toBe(true);
+			expect(count('SELECT COUNT(*) AS n FROM lastfm_scrobbles')).toBe(before.plays);
+			expect(itemCount(w.list.id)).toBe(before.items);
+			expect(logsOf(w.user.id)).toEqual(before.logs);
+			expect(itemByTitle(w.list.id, 'Album 0')!.status).toBe(before.status);
+			expect(sync.getLastfmAccount(w.user.id)!.state).toBe('idle');
+
+			// Not again: the next run is the ordinary sync, which only asks for recent plays
+			unname(w.user.id);
+			server.recent = [];
+			await drain(w.user.id);
+			expect(account(w.user.id)!.job).toBeNull();
+			expect(pages().length).toBeGreaterThan(0);
+			expect(pages().every((u) => u.searchParams.has('from'))).toBe(true);
+		});
+
+		it('is skipped for an account with nothing to fill in', async () => {
+			const w = await upgraded(30);
+			rawDb().prepare("UPDATE lastfm_scrobbles SET track = 'x' WHERE user_id = ?").run(w.user.id);
+			server.recent = [];
+			await drain(w.user.id);
+			expect(account(w.user.id)!.namesAt).not.toBeNull();
+			expect(pages().every((u) => u.searchParams.has('from'))).toBe(true);
+		});
+
+		it('leaves a disconnected account’s plays unnamed, and the page falls back to the folded name', async () => {
+			const w = await upgraded(30);
+			sync.disconnectLastfm(w.user.id);
+			expect(account(w.user.id)).toBeUndefined();
+			expect(names(w.user.id).every((n) => n === null)).toBe(true);
+			const item = itemByTitle(w.list.id, 'Album 0')!;
+			const t = trackSvc.listenedTracks(w.user.id, item.id, item.metadata);
+			expect(t.also[0].name).toBe('Track 0');
+		});
+	});
+});
+
+describe('album tracklists', () => {
+	const info = (name: string, artist: string, tracks: unknown[]) => ({
+		album: {
+			name,
+			artist,
+			url: `https://www.last.fm/music/${artist}/${name}`,
+			image: [],
+			tracks: { track: tracks }
+		}
+	});
+	const tl = (id: number) =>
+		JSON.parse(
+			(rawDb().prepare('SELECT metadata FROM items WHERE id = ?').get(id) as { metadata: string }).metadata
+		) as { tracks?: { name: string; duration: number | null }[]; enriched: boolean; genres: string[] };
+	const settle = () =>
+		rawDb()
+			.prepare(
+				`UPDATE items SET metadata = json_set(metadata, '$.enriched', json('true'),
+					'$.tracks', json(COALESCE(json_extract(metadata, '$.tracks'), '[]')))
+				 WHERE provider = 'lastfm'`
+			)
+			.run();
+	const dropTracks = (id: number) =>
+		rawDb().prepare("UPDATE items SET metadata = json_remove(metadata, '$.tracks') WHERE id = ?").run(id);
+	const withAlbum = async (title = 'Record') => {
+		settle();
+		const w = listener();
+		server.plays.set(w.lfm, [{ uts: nowS() - 60, artist: 'Band', album: title, track: 'One' }]);
+		await connect(w);
+		await drain(w.user.id);
+		settle();
+		return { w, item: itemByTitle(w.list.id, title)! };
+	};
+
+	it('is stored with the details, in order', async () => {
+		const { item } = await withAlbum();
+		rawDb()
+			.prepare("UPDATE items SET metadata = json_set(metadata, '$.enriched', json('false')) WHERE id = ?")
+			.run(item.id);
+		dropTracks(item.id);
+		const reply = info('Record', 'Band', [
+			{ name: 'Second', duration: '200', '@attr': { rank: '2' } },
+			{ name: 'First', duration: '0', '@attr': { rank: '1' } },
+			{ name: '', duration: '5' }
+		]);
+		server.hook = (method) => (method === 'album.getInfo' ? json(reply) : undefined);
+		expect(await sync.enrichNext()).toBe(true);
+		expect(tl(item.id).tracks).toEqual([
+			{ name: 'First', duration: null },
+			{ name: 'Second', duration: 200 }
+		]);
+	});
+
+	it('is filled in later for albums enriched before, without touching anything else', async () => {
+		const { item } = await withAlbum('Fill In Later');
+		rawDb().prepare("UPDATE items SET description = 'Mine' WHERE id = ?").run(item.id);
+		rawDb()
+			.prepare(
+				"UPDATE items SET metadata = json_set(metadata, '$.genres', json('[\"mine only\"]')) WHERE id = ?"
+			)
+			.run(item.id);
+		dropTracks(item.id);
+
+		const spy = vi.spyOn(lastfm, 'details');
+		server.hook = (method) =>
+			method === 'album.getInfo'
+				? json(info('Fill In Later', 'Band', [{ name: 'One', duration: '100', '@attr': { rank: '1' } }]))
+				: undefined;
+		// The details pass has nothing left, so the tracklist pass is next
+		expect(await sync.enrichNext()).toBe(false);
+		expect(await sync.tracklistNext()).toBe(true);
+		expect(tl(item.id)).toMatchObject({ tracks: [{ name: 'One', duration: 100 }], genres: ['mine only'] });
+		expect(itemByTitle(item.categoryId, 'Fill In Later')!.description).toBe('Mine');
+		// Done: not asked for again
+		spy.mockClear();
+		expect(await sync.tracklistNext()).toBe(false);
+		expect(spy).not.toHaveBeenCalled();
+		spy.mockRestore();
+	});
+
+	it('remembers an unknown album, and retries after a temporary error', async () => {
+		const { item } = await withAlbum('Unlisted');
+		dropTracks(item.id);
+
+		server.hook = (method) =>
+			method === 'album.getInfo' ? json({ error: 16, message: 'Temporary error' }, 500) : undefined;
+		expect(await sync.tracklistNext()).toBe(false);
+		expect(tl(item.id).tracks).toBeUndefined();
+
+		server.hook = (method) =>
+			method === 'album.getInfo' ? json({ error: 6, message: 'Album not found' }, 404) : undefined;
+		expect(await sync.tracklistNext()).toBe(true);
+		expect(tl(item.id).tracks).toEqual([]);
+		expect(await sync.tracklistNext()).toBe(false);
+	});
+
+	it('does not overwrite a tracklist that appeared while last.fm was being asked', async () => {
+		const { item } = await withAlbum('Racy');
+		dropTracks(item.id);
+		server.hook = (method) => {
+			if (method !== 'album.getInfo') return undefined;
+			rawDb()
+				.prepare(
+					`UPDATE items SET metadata = json_set(metadata, '$.tracks', json('[{"name":"Mine","duration":null}]')) WHERE id = ?`
+				)
+				.run(item.id);
+			return json(info('Racy', 'Band', [{ name: 'Theirs' }]));
+		};
+		await sync.tracklistNext();
+		expect(tl(item.id).tracks).toEqual([{ name: 'Mine', duration: null }]);
+	});
+});
+
+describe('the viewer’s tracks of an album', () => {
+	/** The viewer's album "Record" with plays of the given tracks (name, how many, days ago) */
+	async function played(list: [string, number, number][], tracklist: string[] | null, album = 'Record') {
+		const w = listener();
+		const plays: Play[] = [];
+		let n = 0;
+		for (const [track, times, daysAgo] of list) {
+			for (let i = 0; i < times; i++) {
+				plays.push({ uts: local(2024, 6, 10 - daysAgo, 9) + n++, artist: 'Band', album, track });
+			}
+		}
+		server.plays.set(w.lfm, plays);
+		await connect(w);
+		await drain(w.user.id);
+		const item = itemByTitle(w.list.id, album)!;
+		if (tracklist) {
+			rawDb()
+				.prepare("UPDATE items SET metadata = json_set(metadata, '$.tracks', json(?)) WHERE id = ?")
+				.run(JSON.stringify(tracklist.map((name) => ({ name, duration: null }))), item.id);
+		}
+		const meta = () =>
+			JSON.parse(
+				(rawDb().prepare('SELECT metadata FROM items WHERE id = ?').get(item.id) as { metadata: string })
+					.metadata
+			);
+		return { w, item, meta };
+	}
+
+	it('lists the tracklist in order with plays, then "also played", matched by folded name', async () => {
+		const { w, item, meta } = await played(
+			[
+				['cafe song', 3, 2],
+				['Third!', 1, 0],
+				['Bonus Cut', 5, 1],
+				['Café Song', 1, 5]
+			],
+			['First', 'Café Song', 'Third', 'Fourth']
+		);
+		const t = trackSvc.listenedTracks(w.user.id, item.id, meta());
+		expect(t.hasTracklist).toBe(true);
+		expect(t.tracks).toEqual([
+			{ name: 'First', plays: 0, last: null },
+			{ name: 'Café Song', plays: 4, last: '2024-06-08' },
+			{ name: 'Third', plays: 1, last: '2024-06-10' },
+			{ name: 'Fourth', plays: 0, last: null }
+		]);
+		expect(t.also).toEqual([{ name: 'Bonus Cut', plays: 5, last: '2024-06-09' }]);
+	});
+
+	it('lists played tracks by plays, most first, when there is no tracklist', async () => {
+		const { w, item, meta } = await played(
+			[
+				['Few', 1, 0],
+				['Many', 4, 1],
+				['Some', 2, 0]
+			],
+			null
+		);
+		const t = trackSvc.listenedTracks(w.user.id, item.id, meta());
+		expect(t.hasTracklist).toBe(false);
+		expect(t.tracks).toEqual([]);
+		expect(t.also.map((r) => [r.name, r.plays])).toEqual([
+			['Many', 4],
+			['Some', 2],
+			['Few', 1]
+		]);
+	});
+
+	it('falls back to the tracklist name, then to the folded name in capitals, when no name is stored', async () => {
+		const { w, item, meta } = await played(
+			[
+				['Café Song', 2, 0],
+				['the other one', 1, 0]
+			],
+			['Café Song (Intro)', 'Café Song']
+		);
+		rawDb().prepare('UPDATE lastfm_scrobbles SET track = NULL WHERE user_id = ?').run(w.user.id);
+		const t = trackSvc.listenedTracks(w.user.id, item.id, meta());
+		expect(t.tracks.map((r) => [r.name, r.plays])).toEqual([
+			['Café Song (Intro)', 0],
+			['Café Song', 2]
+		]);
+		expect(t.also.map((r) => r.name)).toEqual(['The Other One']);
+		const day = trackSvc.tracksOnDay(w.user.id, item.id, meta(), '2024-06-10');
+		expect(day).toEqual([
+			{ name: 'Café Song', count: 2 },
+			{ name: 'The Other One', count: 1 }
+		]);
+	});
+
+	it('gives each day’s tracks in tracklist order, with counts', async () => {
+		const { w, item, meta } = await played(
+			[
+				['B', 2, 0],
+				['A', 1, 0],
+				['Z', 3, 0],
+				['C', 1, 1]
+			],
+			['A', 'B', 'C']
+		);
+		expect(trackSvc.tracksOnDay(w.user.id, item.id, meta(), '2024-06-10')).toEqual([
+			{ name: 'A', count: 1 },
+			{ name: 'B', count: 2 },
+			{ name: 'Z', count: 3 }
+		]);
+		expect(trackSvc.tracksOnDay(w.user.id, item.id, meta(), '2024-06-09')).toEqual([{ name: 'C', count: 1 }]);
+		expect(trackSvc.tracksOnDay(w.user.id, item.id, meta(), '2024-01-01')).toEqual([]);
+	});
+
+	it('reads only the viewer’s own plays, also on a shared list and from the endpoint', async () => {
+		const owner = person();
+		const list = categories.createCategoryFromTemplate(owner.id, 'albums');
+		const friend = person();
+		const stranger = person();
+		const quiet = person();
+		access.saveShares(owner.id, list.id, [
+			{ userId: friend.id, role: 'edit' },
+			{ userId: quiet.id, role: 'view' }
+		]);
+		const mine = { user: owner, list, lfm: `fm${owner.id}` };
+		const theirs = `fm${friend.id}`;
+		const day = local(2024, 6, 10, 9);
+		server.plays.set(mine.lfm, [
+			{ uts: day, artist: 'Band', album: 'Record', track: 'Mine Only' },
+			{ uts: day + 1, artist: 'Band', album: 'Record', track: 'Both' }
+		]);
+		server.plays.set(theirs, [
+			{ uts: day + 2, artist: 'Band', album: 'Record', track: 'Both' },
+			{ uts: day + 3, artist: 'Band', album: 'Record', track: 'Both' },
+			{ uts: day + 4, artist: 'Band', album: 'Record', track: 'Secret Friend Track' }
+		]);
+		await connect(mine);
+		await drain(owner.id);
+		await sync.connectLastfm(friend.id, { username: theirs, categoryId: list.id });
+		await drain(friend.id);
+		const item = itemByTitle(list.id, 'Record')!;
+
+		const get = async (userId: number, id: number, date: string) => {
+			const res = await tracksApi.GET({
+				locals: { user: { id: userId } },
+				params: { id: String(id) },
+				url: new URL(`http://x/items/${id}/tracks?date=${date}`)
+			} as never);
+			return (await res.json()) as { tracks: { name: string; count: number }[] };
+		};
+		expect((await get(owner.id, item.id, '2024-06-10')).tracks).toEqual([
+			{ name: 'Both', count: 1 },
+			{ name: 'Mine Only', count: 1 }
+		]);
+		expect((await get(friend.id, item.id, '2024-06-10')).tracks).toEqual([
+			{ name: 'Both', count: 2 },
+			{ name: 'Secret Friend Track', count: 1 }
+		]);
+		expect(JSON.stringify(trackSvc.listenedTracks(owner.id, item.id, item.metadata))).not.toContain('Secret');
+
+		// Somebody the list isn't shared with, and a bad date
+		await expect(get(stranger.id, item.id, '2024-06-10')).rejects.toMatchObject({ status: 404 });
+		await expect(get(owner.id, item.id, 'yesterday')).rejects.toMatchObject({ status: 404 });
+		await expect(get(owner.id, 999999, '2024-06-10')).rejects.toMatchObject({ status: 404 });
+		// A person with no plays of it sees none, even though the list is shared with them
+		expect((await get(quiet.id, item.id, '2024-06-10')).tracks).toEqual([]);
+		expect(trackSvc.listenedTracks(quiet.id, item.id, item.metadata).also).toEqual([]);
 	});
 });

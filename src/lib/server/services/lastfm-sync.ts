@@ -14,7 +14,7 @@ import {
 } from '../album-match';
 import { reindexItem } from '../search/local';
 import { ALBUM_KINDS } from '$lib/kinds';
-import type { StatusDef } from '$lib/types';
+import type { AlbumTrack, StatusDef } from '$lib/types';
 import { createCategoryFromTemplate, listCategories } from './categories';
 import { listAccess, listSharesOf } from './access';
 import { localDay, refreshLastLogged } from './items';
@@ -24,7 +24,8 @@ import { localDay, refreshLastLogged } from './items';
  * lastfm_scrobbles; each album they've played becomes an item in the list they picked (unless it
  * matches one already there), with one log per album per listening day. The history is read through
  * one "window job": plays from `jobFrom` (exclusive) up to `jobEnd`, newest first, 200 per request,
- * with `jobTo` as the cursor. A backfill is the window 0…now; an incremental sync is syncedUntil…now.
+ * with `jobTo` as the cursor. A backfill is the window 0…now; an incremental sync is syncedUntil…now;
+ * the one-time "names" job (for plays stored before readable track names were kept) is 0…now again.
  * A page's plays and the cursor move are committed together, so a restart resumes exactly there.
  */
 
@@ -64,9 +65,10 @@ export interface LastfmAccountView {
 	categoryName: string | null;
 	syncEvery: 'hourly' | 'daily';
 	journalMode: 'group' | 'hide' | 'all';
-	/** 'importing': the first full import; 'syncing': catching up; 'idle': up to date (or waiting to retry) */
-	state: 'importing' | 'syncing' | 'idle';
-	/** 0–99 while importing, null when the total isn't known yet or nothing is running */
+	/** 'importing': the first full import; 'syncing': catching up; 'naming': the one-time fill-in of track
+	 * names; 'idle': up to date (or waiting to retry) */
+	state: 'importing' | 'syncing' | 'naming' | 'idle';
+	/** 0–99 while importing or filling in names, null when the total isn't known yet or nothing is running */
 	percent: number | null;
 	/** Plays read so far, of how many (when known), and the albums found so far */
 	progress: { done: number; total: number | null; albums: number } | null;
@@ -137,8 +139,18 @@ function viewOf(a: AccountRow, now = Date.now()): LastfmAccountView {
 		categoryName: cat?.name ?? null,
 		syncEvery: a.syncEvery,
 		journalMode: a.journalMode,
-		state: a.job === 'backfill' ? 'importing' : a.job === 'sync' ? 'syncing' : 'idle',
-		percent: a.job === 'backfill' && total ? Math.min(99, Math.floor((a.jobDone / total) * 100)) : null,
+		state:
+			a.job === 'backfill'
+				? 'importing'
+				: a.job === 'sync'
+					? 'syncing'
+					: a.job === 'names'
+						? 'naming'
+						: 'idle',
+		percent:
+			(a.job === 'backfill' || a.job === 'names') && total
+				? Math.min(99, Math.floor((a.jobDone / total) * 100))
+				: null,
 		progress: running ? { done: a.jobDone, total, albums: albumsNow } : null,
 		plays: a.plays,
 		albums: albumsNow,
@@ -584,19 +596,25 @@ export function applyScrobbles(
 
 		const albums = albumFinder(userId, a.username);
 		const insertPlay = sqlite.prepare(
-			'INSERT OR IGNORE INTO lastfm_scrobbles (user_id, uts, track_key, album_id, date) VALUES (?, ?, ?, ?, ?)'
+			'INSERT OR IGNORE INTO lastfm_scrobbles (user_id, uts, track_key, album_id, date, track) VALUES (?, ?, ?, ?, ?, ?)'
+		);
+		// A play seen again fills in the name it lacks; one that has a name keeps it. Counts never change.
+		const nameIt = sqlite.prepare(
+			'UPDATE lastfm_scrobbles SET track = ? WHERE user_id = ? AND uts = ? AND track_key = ? AND track IS NULL'
 		);
 		const work: Work = new Map();
 		let inserted = 0;
 		for (const p of plays) {
 			if (!p.album || !p.artist) continue;
 			const date = localDay(p.uts * 1000);
-			const track = `${foldName(p.artist)}|${foldName(p.track)}`;
+			const trackKey = `${foldName(p.artist)}|${foldName(p.track)}`;
+			const name = p.track.trim() || null;
 			const known = albums.find(p);
 			const row = known ?? albums.create(p);
 			const albumId = row.id;
-			const r = insertPlay.run(userId, p.uts, track, albumId, date);
+			const r = insertPlay.run(userId, p.uts, trackKey, albumId, date, name);
 			if (!r.changes) {
+				if (name) nameIt.run(name, userId, p.uts, trackKey);
 				// Already stored (an overlap re-read, maybe under another album name): leave no empty album behind
 				if (!known) albums.discard(p, row);
 				continue;
@@ -620,7 +638,19 @@ export function applyScrobbles(
 		if (cursor.jobTotal !== undefined) set.jobTotal = cursor.jobTotal;
 		if (cursor.addDone) set.jobDone = a.jobDone + cursor.addDone;
 		if (!error) set.nextSyncAt = a.job ? 0 : a.nextSyncAt;
-		if (cursor.finish) {
+		if (cursor.finish && a.job === 'names') {
+			// The one-time name re-read: nothing about the history itself changes, only that it is done
+			Object.assign(set, {
+				namesAt: now,
+				job: null,
+				jobFrom: null,
+				jobTo: null,
+				jobEnd: null,
+				jobTotal: null,
+				jobDone: 0,
+				nextSyncAt: 0
+			});
+		} else if (cursor.finish) {
 			const totals = sqlite
 				.prepare(
 					`SELECT (SELECT COUNT(*) FROM lastfm_scrobbles WHERE user_id = @u) AS plays,
@@ -641,7 +671,9 @@ export function applyScrobbles(
 				lastSyncAt: new Date(now),
 				nextSyncAt: now + (a.syncEvery === 'daily' ? DAY : HOUR),
 				plays: totals.plays,
-				albums: totals.albums
+				albums: totals.albums,
+				// A backfill that began before names were kept still has unnamed plays: the names job reads them
+				...(a.job === 'backfill' ? { namesAt: hasUnnamedPlays(userId) ? null : now } : {})
 			});
 		}
 		db().update(schema.lastfmAccounts).set(set).where(eq(schema.lastfmAccounts.userId, userId)).run();
@@ -713,6 +745,23 @@ function startBackfill(userId: number) {
 			errorMessage: null,
 			errorCount: 0
 		})
+		.where(eq(schema.lastfmAccounts.userId, userId))
+		.run();
+}
+
+/** Some stored play has no readable track name yet (stored before names were kept) */
+function hasUnnamedPlays(userId: number): boolean {
+	return !!rawDb()
+		.prepare('SELECT 1 FROM lastfm_scrobbles WHERE user_id = ? AND track IS NULL LIMIT 1')
+		.get(userId);
+}
+
+/** The one-time re-read of the whole history that fills in track names (a window job like a backfill) */
+function startNames(userId: number) {
+	const nowS = Math.floor(Date.now() / 1000);
+	db()
+		.update(schema.lastfmAccounts)
+		.set({ job: 'names', jobFrom: 0, jobTo: nowS, jobEnd: nowS, jobTotal: null, jobDone: 0, nextSyncAt: 0 })
 		.where(eq(schema.lastfmAccounts.userId, userId))
 		.run();
 }
@@ -1089,7 +1138,17 @@ export async function runPage(
 		relinkPending(userId, run);
 		if (!a.backfilledAt) {
 			startBackfill(userId);
+		} else if (a.namesAt === null && hasUnnamedPlays(userId)) {
+			startNames(userId);
 		} else {
+			if (a.namesAt === null) {
+				// Nothing to fill in (or nothing stored): there is no names job to run, ever
+				db()
+					.update(schema.lastfmAccounts)
+					.set({ namesAt: now })
+					.where(eq(schema.lastfmAccounts.userId, userId))
+					.run();
+			}
 			const nowS = Math.floor(now / 1000);
 			const deep = now - a.deepSyncAt >= DAY;
 			const jobFrom = Math.max(0, a.syncedUntil - (deep ? DEEP_OVERLAP_S : OVERLAP_S));
@@ -1241,7 +1300,12 @@ const sleep = (ms: number, signal?: AbortSignal) =>
 
 /** Work for when no history is being read: the details fill-in, about one album every 2 s */
 async function idleWork(deadline: number, signal: AbortSignal): Promise<void> {
-	while (Date.now() < deadline && !signal.aborted && (await enrichNext(signal))) {
+	// Details first; once none are pending, tracklists for albums that were filled in before they were kept
+	while (
+		Date.now() < deadline &&
+		!signal.aborted &&
+		((await enrichNext(signal)) || (await tracklistNext(signal)))
+	) {
 		if (Date.now() + ENRICH_EVERY_MS >= deadline) break;
 		await sleep(ENRICH_EVERY_MS, signal);
 	}
@@ -1289,6 +1353,7 @@ export async function enrichNext(signal?: AbortSignal): Promise<boolean> {
 		facts?: { label: string; value: string }[];
 		imageUrl?: string | null;
 		url?: string | null;
+		tracks?: unknown;
 		[k: string]: unknown;
 	};
 
@@ -1305,7 +1370,10 @@ export async function enrichNext(signal?: AbortSignal): Promise<boolean> {
 	sqlite.transaction(() => {
 		if (!d) {
 			sqlite
-				.prepare("UPDATE items SET metadata = json_set(metadata, '$.enriched', json('true')) WHERE id = ?")
+				.prepare(
+					`UPDATE items SET metadata = json_set(metadata, '$.enriched', json('true'),
+						'$.tracks', json(COALESCE(json_extract(metadata, '$.tracks'), '[]'))) WHERE id = ?`
+				)
 				.run(row.id);
 			return;
 		}
@@ -1322,6 +1390,8 @@ export async function enrichNext(signal?: AbortSignal): Promise<boolean> {
 				genres,
 				facts,
 				imageUrl: meta.imageUrl ?? art,
+				// A tracklist that is already there stays
+				tracks: meta.tracks ?? d.tracks ?? [],
 				url: meta.url ?? d.url ?? null,
 				enriched: true,
 				fetchedAt: new Date().toISOString()
@@ -1342,6 +1412,38 @@ export async function enrichNext(signal?: AbortSignal): Promise<boolean> {
 	reindexItem(row.id);
 	return true;
 }
+/**
+ * The low-priority pass after the details: albums that were filled in (or added from search) before
+ * tracklists were kept get theirs. Only the tracklist is written, so nothing else on the item is touched
+ * and a tracklist that appeared meanwhile is never overwritten. An album last.fm can't give a tracklist
+ * for gets an empty one, so it isn't asked for again. Returns true when it handled an album.
+ */
+export async function tracklistNext(signal?: AbortSignal): Promise<boolean> {
+	const sqlite = rawDb();
+	const row = sqlite
+		.prepare(
+			`SELECT id, provider_id AS pid FROM items
+			 WHERE provider = 'lastfm' AND provider_kind = 'album' AND json_extract(metadata, '$.enriched') = 1
+			 AND json_extract(metadata, '$.tracks') IS NULL ORDER BY id LIMIT 1`
+		)
+		.get() as { id: number; pid: string } | undefined;
+	if (!row) return false;
+	let tracks: AlbumTrack[] = [];
+	try {
+		tracks = (await lastfm.details('album', row.pid, signal)).tracks ?? [];
+	} catch (e) {
+		if (signal?.aborted || (e instanceof ProviderError && TEMPORARY.has(e.code))) return false;
+		if (!(e instanceof ProviderError)) console.warn(`[lastfm] tracklist for item ${row.id} failed`, e);
+	}
+	sqlite
+		.prepare(
+			`UPDATE items SET metadata = json_set(metadata, '$.tracks', json(?))
+			 WHERE id = ? AND json_extract(metadata, '$.tracks') IS NULL`
+		)
+		.run(JSON.stringify(tracks), row.id);
+	return true;
+}
+
 async function tick() {
 	if (busy) {
 		again = true;

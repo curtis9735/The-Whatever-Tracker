@@ -66,6 +66,7 @@
 				: `Importing… ${plural(p.done, 'play', 'plays')} · ${plural(p.albums, 'album', 'albums')} so far`;
 		}
 		if (a.state === 'syncing') return 'Checking for new plays…';
+		if (a.state === 'naming') return `Filling in track names…${a.percent !== null ? ` ${a.percent}%` : ''}`;
 		const parts = ['Up to date', plural(a.plays, 'play', 'plays'), plural(a.albums, 'album', 'albums')];
 		if (a.lastSyncAt) parts.push(`last synced ${ago(a.lastSyncAt)}`);
 		return parts.join(' · ');

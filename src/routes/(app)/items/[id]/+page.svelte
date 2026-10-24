@@ -16,6 +16,8 @@
 	import MetadataMatch from '$lib/components/MetadataMatch.svelte';
 	import EpisodeSelect from '$lib/components/EpisodeSelect.svelte';
 	import EpisodeTracker from '$lib/components/EpisodeTracker.svelte';
+	import AlbumTracks from '$lib/components/AlbumTracks.svelte';
+	import LogTracks from '$lib/components/LogTracks.svelte';
 	import HouseholdProgress from '$lib/components/HouseholdProgress.svelte';
 	import CheckInButton from '$lib/components/CheckInButton.svelte';
 	import WatchCard from '$lib/components/WatchCard.svelte';
@@ -398,6 +400,10 @@
 			</section>
 		{/if}
 
+		{#if data.tracks && (data.tracks.tracks.length || data.tracks.also.length)}
+			<AlbumTracks tracks={data.tracks} />
+		{/if}
+
 		{#if item.description || meta?.facts?.length}
 			<details class="card mt-5 p-4" open={!data.logs.length}>
 				<summary class="cursor-pointer text-sm font-medium">
@@ -621,10 +627,9 @@
 											</p>
 										{/if}
 										{#if lfm}
-											<p class="flex items-center gap-1 text-sm text-muted">
-												<span aria-hidden="true">🎧</span>
-												{lfm.plays + (lfm.plays === 1 ? ' track' : ' tracks') + ' · last.fm'}
-											</p>
+											<div class="mt-0.5">
+												<LogTracks itemId={item.id} date={log.date} plays={lfm.plays} />
+											</div>
 										{/if}
 										{#if log.location}
 											<p class="flex items-center gap-1 text-sm text-muted">

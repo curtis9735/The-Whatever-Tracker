@@ -14,6 +14,7 @@ import {
 	updateItem,
 	updateLog
 } from '$lib/server/services/items';
+import { listenedTracks } from '$lib/server/services/tracks';
 import { fetchSetlist } from '$lib/server/providers/setlistfm';
 import { ProviderError } from '$lib/server/providers/util';
 import type { SetlistEvent } from '$lib/types';
@@ -59,6 +60,8 @@ export const load: PageServerLoad = async ({ locals, params, url }) => {
 	const tracked = isTrackedShow(detail.item);
 	return {
 		...detail,
+		// Only the viewer's own plays, and only when they have some
+		tracks: detail.listening ? listenedTracks(locals.user!.id, detail.item.id, detail.item.metadata) : null,
 		today,
 		tracked,
 		// Episodes come from TMDB: streamed, so the rest of the page never waits for it

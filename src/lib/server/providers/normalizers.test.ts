@@ -376,6 +376,29 @@ describe('last.fm', () => {
 		expect(bare.facts.map((f) => f.label)).toEqual(['Artist', 'Tracks']);
 	});
 
+	it('reads the tracklist in rank order, with durations when there are some', () => {
+		const d = normalizeLfmAlbum({
+			name: 'X',
+			artist: 'Y',
+			tracks: {
+				track: [
+					{ name: 'Two', duration: '181', '@attr': { rank: '2' } },
+					{ name: 'One', duration: '0', '@attr': { rank: '1' } },
+					{ duration: '90' }
+				]
+			}
+		});
+		expect(d.tracks).toEqual([
+			{ name: 'One', duration: null },
+			{ name: 'Two', duration: 181 }
+		]);
+		// One track comes as a plain object, none as nothing
+		expect(normalizeLfmAlbum({ name: 'X', artist: 'Y', tracks: { track: { name: 'Solo' } } }).tracks).toEqual(
+			[{ name: 'Solo', duration: null }]
+		);
+		expect(normalizeLfmAlbum({ name: 'X', artist: 'Y' }).tracks).toEqual([]);
+	});
+
 	it('formats artist facts, with the first five similar artists', () => {
 		const d = normalizeLfmArtist(
 			{

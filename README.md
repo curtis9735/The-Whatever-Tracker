@@ -327,6 +327,10 @@ list has **TV shows** ticked.
     many there are, with a **Re-add them** button that restores them, with logs for every day you played them.
   - **Albums from search:** a list with **Music** ticked also searches last.fm for covers, genres and
     descriptions. Adding an album the list already has opens it.
+  - **Tracks:** an album's page lists the tracks you've played, in the album's order, with how often and when you
+    last played each (plays that aren't on the tracklist come under **Also played**). Each imported day opens to
+    show that day's tracks. Only your own plays are shown, even on a shared list. After an upgrade, the first sync
+    re-reads your history once to fill in track names (**Filling in track names…** on **Settings → last.fm**).
 - **Spreadsheet import:** to bring in a table you already keep (a whiskey spreadsheet, say), open the list and
   tap the upload icon beside the settings gear (or **Me → Your data**, then pick the list). Select the cells in
   your spreadsheet **including the header row**, copy, and paste them in, or choose a CSV file. Only include the
