@@ -158,9 +158,10 @@
 	>
 		<div class="mx-auto grid max-w-md grid-cols-5">
 			<a href="/" class="tab" class:tab-active={isActive('/')}><Icon name="home" /><span>Home</span></a>
-			<button class="tab" onclick={() => (searchUi.open = true)}
-				><Icon name="search" /><span>Search</span></button
-			>
+			<!-- Search lives in the top bar on phones too -->
+			<a href="/journal" class="tab" class:tab-active={isActive('/journal')}>
+				<Icon name="book" /><span>Journal</span>
+			</a>
 			<a href="/add" class="tab" aria-label="Add">
 				<span
 					class="-mt-5 flex h-14 w-14 items-center justify-center rounded-full bg-accent text-accent-fg shadow-lg"
