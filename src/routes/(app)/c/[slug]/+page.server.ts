@@ -15,7 +15,8 @@ export const load: PageServerLoad = async ({ locals, params, url }) => {
 	const filterable = itemFields.filter((f) => f.type === 'select' || f.type === 'multiselect');
 	const fieldKey = sp.get('field');
 	const fieldDef = filterable.find((f) => f.key === fieldKey);
-	const sortParam = sp.get('sort');
+	// 'recent' (Recently updated) was folded into Recently logged; old links still work
+	const sortParam = sp.get('sort') === 'recent' ? 'logged' : sp.get('sort');
 	const sort = (SORTS as readonly string[]).includes(sortParam ?? '')
 		? (sortParam as ListFilters['sort'])
 		: 'logged';

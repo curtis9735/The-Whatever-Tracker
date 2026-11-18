@@ -111,7 +111,6 @@
 			onchange={(e) => (e.currentTarget as HTMLSelectElement).form?.requestSubmit()}
 		>
 			<option value="logged" selected={f.sort === 'logged'}>Recently logged</option>
-			<option value="recent" selected={f.sort === 'recent'}>Recently updated</option>
 			<option value="rating" selected={f.sort === 'rating'}>Highest rated</option>
 			<option value="title" selected={f.sort === 'title'}>Title A–Z</option>
 			<option value="added" selected={f.sort === 'added'}>Date added</option>
