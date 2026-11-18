@@ -18,7 +18,7 @@ export const load: PageServerLoad = async ({ locals, params, url }) => {
 	const sortParam = sp.get('sort');
 	const sort = (SORTS as readonly string[]).includes(sortParam ?? '')
 		? (sortParam as ListFilters['sort'])
-		: 'recent';
+		: 'logged';
 
 	const filters: ListFilters = {
 		status: sp.get('status'),
