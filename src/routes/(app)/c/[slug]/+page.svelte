@@ -2,6 +2,7 @@
 	import { page } from '$app/state';
 	import ItemCard from '$lib/components/ItemCard.svelte';
 	import Icon from '$lib/components/Icon.svelte';
+	import Rating from '$lib/components/Rating.svelte';
 	import { categoryColor } from '$lib/kinds';
 
 	let { data } = $props();
@@ -30,6 +31,22 @@
 		return s ? `?${s}` : page.url.pathname;
 	}
 
+	/** The Shows view: this page's concerts under a heading per year ("2023 · 5 shows", counted over every page) */
+	const showGroups = $derived(
+		data.showYears
+			.map((y) => ({
+				year: y.year,
+				heading: `${y.year} · ${y.count} ${y.count === 1 ? 'show' : 'shows'}`,
+				rows: data.shows.filter((s) => s.date.startsWith(y.year))
+			}))
+			.filter((g) => g.rows.length)
+	);
+
+	/** "Oct 20": the year is in the heading */
+	function showDay(d: string) {
+		return new Date(`${d}T00:00:00`).toLocaleDateString(undefined, { month: 'short', day: 'numeric' });
+	}
+
 	const totalPages = $derived(Math.max(1, Math.ceil(data.total / data.pageSize)));
 	const activeFilters = $derived([f.tag, f.min, f.fav ? '1' : '', f.q, f.value].filter(Boolean).length);
 </script>
@@ -44,7 +61,16 @@
 	>
 	<div class="min-w-0 flex-1">
 		<h1 class="truncate text-2xl font-semibold tracking-tight">{c.name}</h1>
-		<p class="text-sm text-muted">{data.total} {data.total === 1 ? 'item' : 'items'}{sharedNote}</p>
+		<p class="text-sm text-muted">
+			{data.total}
+			{data.view === 'shows'
+				? data.total === 1
+					? 'show'
+					: 'shows'
+				: data.total === 1
+					? 'item'
+					: 'items'}{sharedNote}
+		</p>
 		{#if !owner}
 			<p class="flex items-center gap-1 text-xs text-muted">
 				<Icon name="users" size={12} class="shrink-0" />
@@ -100,25 +126,27 @@
 	<button class="btn btn-sm" onclick={() => (showFilters = !showFilters)} aria-expanded={showFilters}>
 		<Icon name="filter" size={14} /> Filters{activeFilters ? ` (${activeFilters})` : ''}
 	</button>
-	<form method="GET" class="contents" data-sveltekit-keepfocus data-sveltekit-replacestate>
-		{#each [...page.url.searchParams].filter(([k]) => !['sort', 'page'].includes(k)) as [k, v] (k)}
-			<input type="hidden" name={k} value={v} />
-		{/each}
-		<select
-			name="sort"
-			class="input min-h-8 w-auto rounded-lg py-0 text-xs"
-			aria-label="Sort"
-			onchange={(e) => (e.currentTarget as HTMLSelectElement).form?.requestSubmit()}
-		>
-			<option value="logged" selected={f.sort === 'logged'}>Recently logged</option>
-			<option value="rating" selected={f.sort === 'rating'}>Highest rated</option>
-			<option value="title" selected={f.sort === 'title'}>Title A–Z</option>
-			<option value="added" selected={f.sort === 'added'}>Date added</option>
-			{#if data.hasPlays || f.sort === 'plays'}
-				<option value="plays" selected={f.sort === 'plays'}>Most played</option>
-			{/if}
-		</select>
-	</form>
+	{#if data.view !== 'shows'}
+		<form method="GET" class="contents" data-sveltekit-keepfocus data-sveltekit-replacestate>
+			{#each [...page.url.searchParams].filter(([k]) => !['sort', 'page'].includes(k)) as [k, v] (k)}
+				<input type="hidden" name={k} value={v} />
+			{/each}
+			<select
+				name="sort"
+				class="input min-h-8 w-auto rounded-lg py-0 text-xs"
+				aria-label="Sort"
+				onchange={(e) => (e.currentTarget as HTMLSelectElement).form?.requestSubmit()}
+			>
+				<option value="logged" selected={f.sort === 'logged'}>Recently logged</option>
+				<option value="rating" selected={f.sort === 'rating'}>Highest rated</option>
+				<option value="title" selected={f.sort === 'title'}>Title A–Z</option>
+				<option value="added" selected={f.sort === 'added'}>Date added</option>
+				{#if data.hasPlays || f.sort === 'plays'}
+					<option value="plays" selected={f.sort === 'plays'}>Most played</option>
+				{/if}
+			</select>
+		</form>
+	{/if}
 	<div class="ml-auto flex rounded-lg border border-border">
 		<a
 			href={withParams({ view: null, page: String(data.page) })}
@@ -128,10 +156,19 @@
 		>
 		<a
 			href={withParams({ view: 'list', page: String(data.page) })}
-			class="btn btn-ghost btn-sm rounded-l-none"
+			class="btn btn-ghost btn-sm rounded-none"
 			class:text-accent={data.view === 'list'}
 			aria-label="List view"><Icon name="list" size={16} /></a
 		>
+		{#if data.concerts}
+			<a
+				href={withParams({ view: 'shows', page: String(data.page) })}
+				class="btn btn-ghost btn-sm rounded-l-none"
+				class:text-accent={data.view === 'shows'}
+				aria-label="Shows view"
+				title="Shows"><Icon name="ticket" size={16} /></a
+			>
+		{/if}
 	</div>
 </div>
 
@@ -142,7 +179,7 @@
 		data-sveltekit-replacestate
 	>
 		{#if f.status}<input type="hidden" name="status" value={f.status} />{/if}
-		{#if data.view === 'list'}<input type="hidden" name="view" value="list" />{/if}
+		{#if data.view !== 'grid'}<input type="hidden" name="view" value={data.view} />{/if}
 		<input type="hidden" name="sort" value={f.sort} />
 		<div>
 			<label class="label" for="flt-q">Title contains</label>
@@ -185,7 +222,71 @@
 	</form>
 {/if}
 
-{#if data.rows.length === 0}
+{#if data.view === 'shows' && data.shows.length === 0}
+	<div class="card p-8 text-center">
+		<p class="mb-1 text-3xl" aria-hidden="true"><Icon name="ticket" size={32} class="mx-auto" /></p>
+		<p class="mb-4 text-sm text-muted">
+			{activeFilters || f.status || f.q
+				? 'No shows match these filters.'
+				: 'No shows yet. Log a concert on an artist and it shows up here.'}
+		</p>
+		<div class="flex flex-wrap justify-center gap-2">
+			{#if activeFilters || f.status}
+				<a
+					class="btn btn-sm"
+					href={withParams({
+						status: null,
+						group: null,
+						tag: null,
+						min: null,
+						fav: null,
+						q: null,
+						field: null,
+						value: null
+					})}>Clear filters</a
+				>
+			{/if}
+		</div>
+	</div>
+{:else if data.view === 'shows'}
+	<div class="space-y-6">
+		{#each showGroups as g (g.year)}
+			<section>
+				<h2 class="mb-2 text-sm font-semibold text-muted">{g.heading}</h2>
+				<div class="card divide-y divide-border overflow-hidden">
+					{#each g.rows as s (s.logId)}
+						<a href="/items/{s.itemId}#log-{s.logId}" class="flex items-center gap-3 p-3 hover:bg-surface-2">
+							<div
+								class="flex h-12 w-12 shrink-0 items-center justify-center overflow-hidden rounded-lg bg-surface-2 text-xl"
+							>
+								{#if s.coverUrl}
+									<img src={s.coverUrl} alt="" loading="lazy" class="h-full w-full object-cover" />
+								{:else}
+									<span aria-hidden="true">{c.icon}</span>
+								{/if}
+							</div>
+							<div class="min-w-0 flex-1">
+								<p class="flex items-baseline gap-2">
+									<span class="truncate font-medium">{s.artist}</span>
+									<span class="shrink-0 text-xs text-muted tabular-nums">{showDay(s.date)}</span>
+								</p>
+								{#if s.tour}<p class="truncate text-sm">{s.tour}</p>{/if}
+								{#if s.place || s.songs !== null}
+									<p class="truncate text-xs text-muted">
+										{[s.place, s.songs !== null ? `${s.songs} ${s.songs === 1 ? 'song' : 'songs'}` : '']
+											.filter(Boolean)
+											.join(' · ')}
+									</p>
+								{/if}
+							</div>
+							<Rating value={s.rating} class="shrink-0 text-sm" />
+						</a>
+					{/each}
+				</div>
+			</section>
+		{/each}
+	</div>
+{:else if data.rows.length === 0}
 	<div class="card p-8 text-center">
 		<p class="mb-1 text-3xl" aria-hidden="true">{c.icon}</p>
 		<p class="mb-4 text-sm text-muted">

@@ -270,6 +270,9 @@ list has **TV shows** ticked.
   automatically → Extras** gets the lookup. That option appears once the list has **Concerts** ticked, and
   the Concerts template has both. To search for artists in the search bar, also connect MusicBrainz, which only
   needs an email address or URL as contact info.
+  - **Shows view:** on a concert list, the third button next to the grid and list views shows every show you
+    went to, newest first and grouped by year, with the tour, venue, song count and your rating. Tap one to
+    jump to that show on the artist. Search and the status, tag, favorite and rating filters still apply.
   - **When adding the artist** (from search or the Add form): choose **Seen** and the date of the show. The show
     is saved right away, and if setlist.fm has it, the venue and full setlist come with it. On the rare day with
     more than one show, you're asked to pick yours.

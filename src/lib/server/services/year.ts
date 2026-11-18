@@ -3,6 +3,7 @@ import { foldName } from '../providers/artist-images';
 import { todayIso } from '../forms';
 import { ME, PROGRESS_JOIN, mine } from './access';
 import { sharedSlug } from './categories';
+import { CONCERT_LIST } from './concerts';
 import { IN_LISTS, logBounds, visibleLists } from './journal';
 import { imageSrc, type ImageRef } from '$lib/images';
 import { addDays } from '$lib/journal';
@@ -338,7 +339,7 @@ export function yearInReview(userId: number, year: number, today: string = today
 			`SELECT l.id, l.date, l.rating, l.location, l.item_id AS itemId, i.title, ${mine('rating')} AS itemRating,
 				c.id AS catId, c.name AS catName, c.icon AS catIcon, c.color AS catColor, c.slug AS catSlug,
 				c.user_id AS ownerId, o.username AS ownerName,
-				(c.template_key = 'concerts' OR c.provider_kinds LIKE '%"lastfm:artist"%') AS concert,
+				${CONCERT_LIST} AS concert,
 				(i.provider = 'tmdb' AND i.provider_kind = 'movie') AS movie,
 				CASE WHEN i.provider = 'tmdb' AND i.provider_kind = 'movie' THEN json_extract(i.metadata, '$.facts') END AS facts,
 				${IMG_COLUMNS}

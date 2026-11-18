@@ -613,7 +613,7 @@
 					{#each data.logs as log, li (log.id)}
 						{@const sl = (log.external as { setlist?: SetlistEvent } | null)?.setlist}
 						{@const lfm = (log.external as { lastfm?: { plays: number } } | null)?.lastfm}
-						<li class="relative">
+						<li class="relative scroll-mt-20" id="log-{log.id}">
 							<span class="absolute top-1.5 -left-[27px] h-3 w-3 rounded-full border-2 border-bg bg-accent"
 							></span>
 							<div class="card p-4">

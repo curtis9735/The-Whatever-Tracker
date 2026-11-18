@@ -1,3 +1,4 @@
+import { isConcertList, listShows } from '$lib/server/services/concerts';
 import { getCategoryBySlug } from '$lib/server/services/categories';
 import { listItems, statusCounts, type ListFilters } from '$lib/server/services/items';
 import { rawDb } from '$lib/server/db';
@@ -36,7 +37,24 @@ export const load: PageServerLoad = async ({ locals, params, url }) => {
 		page: Number(sp.get('page') ?? 1) || 1,
 		pageSize: 60
 	};
-	const { rows, total } = listItems(userId, category.id, category.statuses, filters);
+	// Concert lists have a "Shows" view: one row per concert the viewer logged, not one per artist
+	const concerts = isConcertList(userId, category.id);
+	const view = concerts && sp.get('view') === 'shows' ? 'shows' : sp.get('view') === 'list' ? 'list' : 'grid';
+	const shows =
+		view === 'shows'
+			? listShows(userId, category.id, {
+					q: filters.q,
+					status: filters.status,
+					tag: filters.tag,
+					minRating: filters.minRating,
+					favorite: filters.favorite,
+					page: filters.page,
+					pageSize: filters.pageSize
+				})
+			: null;
+	const { rows, total } = shows
+		? { rows: [], total: shows.total }
+		: listItems(userId, category.id, category.statuses, filters);
 
 	// Tags on the list's items (for a shared list, the ones its owner and editors gave them)
 	const categoryTags = (
@@ -81,6 +99,9 @@ export const load: PageServerLoad = async ({ locals, params, url }) => {
 			value: sp.get('value') ?? '',
 			sort
 		},
-		view: sp.get('view') === 'list' ? 'list' : 'grid'
+		concerts,
+		shows: shows?.rows ?? [],
+		showYears: shows?.years ?? [],
+		view
 	};
 };
