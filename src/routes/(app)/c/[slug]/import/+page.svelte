@@ -273,7 +273,7 @@
 					<table class="w-full border-separate border-spacing-0 text-sm">
 						<thead>
 							<tr class="align-bottom">
-								<th class="sticky left-0 z-10 w-8 border-b border-border bg-surface p-1"></th>
+								<th class="sticky left-0 z-[1] w-8 border-b border-border bg-surface p-1"></th>
 								<th class="min-w-24 border-b border-border p-1 text-left align-bottom text-xs font-medium"
 									>Result</th
 								>
@@ -337,7 +337,7 @@
 							{#each visible as r (r.index)}
 								{@const off = isSkipped(r)}
 								<tr class={off ? 'opacity-50' : ''}>
-									<td class="sticky left-0 z-10 border-b border-border bg-surface p-1 text-center">
+									<td class="sticky left-0 z-[1] border-b border-border bg-surface p-1 text-center">
 										<input
 											type="checkbox"
 											class="h-4 w-4 accent-[var(--accent)]"
