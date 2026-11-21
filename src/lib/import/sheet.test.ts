@@ -203,6 +203,20 @@ describe('guessing where columns go', () => {
 		).toMatch(/Date column/);
 	});
 
+	it('still finds the names when the list already has a field called like the name column', () => {
+		const ctx = {
+			...whiskey,
+			itemFields: [
+				...whiskey.itemFields,
+				{ ...whiskey.itemFields[0], key: 'whiskey_name', label: 'Whiskey Name' }
+			]
+		};
+		const t = parseTable('Whiskey Name\tCost\tDate Sampled\nAccord Stone\t9\t2025-12-02');
+		const m = guessMapping(t, ctx);
+		expect(m.targets).toEqual(['basic:name', 'field:price', 'log:date']);
+		expect(validateMapping(m, t, ctx)).toBeNull();
+	});
+
 	it('refuses a mapping that sends two columns to the same place or has no name', () => {
 		expect(
 			validateMapping({ ...mapping, targets: mapping.targets.map(() => 'basic:name') }, table, whiskey)

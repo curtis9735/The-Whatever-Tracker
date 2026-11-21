@@ -333,6 +333,15 @@ export function guessMapping(table: Table, ctx: ListContext): ImportMapping {
 	}
 
 	// Every list needs names: take the first plain-text column if nothing was called "name"
+	// A column called "… Name" wins over a list field of the same name (an earlier import may have
+	// made a "Whiskey Name" field), since items can't be added without names
+	if (!taken.has('basic:name')) {
+		const j = hs.findIndex((w) => hasWord(w, SYNONYMS.name));
+		if (j !== -1) {
+			targets[j] = 'basic:name';
+			taken.add('basic:name');
+		}
+	}
 	if (!taken.has('basic:name')) {
 		const j = targets.findIndex((t) => t === 'new:text');
 		const pick = j !== -1 ? j : targets.findIndex((t) => t === null || t?.startsWith('new:'));
